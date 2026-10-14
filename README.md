@@ -48,7 +48,7 @@ What works today:
   readout, timeline and playback, on-viewer handles), a Properties panel (every knob kind, keys,
   one undo step per drag), a Curve Editor, Backdrops and StickyNotes, copy/paste, background
   rendering with progress, menus built from the command registry, undo/redo, autosave.
-- **45 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Rectangle, Radial, Grade,
+- **46 node classes:** Read, Write, Constant, CheckerBoard, ColorBars, Ramp, Rectangle, Radial, Grade,
   ColorCorrect, Saturation, Clamp, Invert, Multiply, Add, Gamma, Exposure (all with mask, unpremult
   and mix), Shuffle, Copy, ChannelMerge, Remove, Premult, Unpremult, Merge (29 operations, mask
   input), Keymix, Dissolve, Transform (six cubic filters + impulse, black outside), Reformat,

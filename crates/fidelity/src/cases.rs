@@ -768,22 +768,68 @@ fn sources(out: &mut Vec<Case>) {
                 .knob("boxsize", json!([16, 16]))
                 .knob("color0", json!([0.1, 0.1, 0.1, 1]))
                 .knob("color1", json!([0.9, 0.9, 0.9, 1]))
-                .nuke_knob("color2", json!([0.1, 0.1, 0.1, 1]))
-                .nuke_knob("color3", json!([0.9, 0.9, 0.9, 1]))
-                .nuke_knob("linewidth", json!(0))
-                .nuke_knob("centerlinewidth", json!(0)),
+                .knob("color2", json!([0.1, 0.1, 0.1, 1]))
+                .knob("color3", json!([0.9, 0.9, 0.9, 1]))
+                .knob("linewidth", json!(0))
+                .knob("centerlinewidth", json!(0)),
         ],
         vec![sample("C", grid(4), &["rgba.red"])],
     ));
-    let mut c = case(
+    out.push(case(
         "checkerboard.default",
         "F9",
         "CheckerBoard with Nuke's defaults (four colours, lines)",
         vec![NodeDef::new("C", "CheckerBoard2")],
         vec![sample("C", grid(4), &RGBA)],
-    );
-    c.nukecraft = false;
-    out.push(c);
+    ));
+    out.push(case(
+        "checkerboard.four",
+        "F9",
+        "CheckerBoard with four distinct colours and no lines: which box gets which colour",
+        vec![
+            NodeDef::new("C", "CheckerBoard2")
+                .knob("boxsize", json!([16, 16]))
+                .knob("color0", json!([0.1, 0, 0, 1]))
+                .knob("color1", json!([0.2, 0, 0, 1]))
+                .knob("color2", json!([0.3, 0, 0, 1]))
+                .knob("color3", json!([0.4, 0, 0, 1]))
+                .knob("linewidth", json!(0))
+                .knob("centerlinewidth", json!(0)),
+        ],
+        vec![sample("C", grid(8), &["rgba.red"])],
+    ));
+    out.push(case(
+        "checkerboard.lines",
+        "F9",
+        "CheckerBoard lines: width 5 between 16-pixel boxes, a 3-pixel centre line",
+        vec![
+            NodeDef::new("C", "CheckerBoard2")
+                .knob("boxsize", json!([16, 16]))
+                .knob("linewidth", json!(5))
+                .knob("linecolor", json!([0, 1, 0, 1]))
+                .knob("centerlinewidth", json!(3))
+                .knob("centerlinecolor", json!([0, 0, 1, 1])),
+        ],
+        vec![sample("C", [span(10, 36, 5), (0..12).map(|y| (5, y + 10)).collect()].concat(), &RGBA)],
+    ));
+    for (id, knobs) in [("default", json!({})), ("full", json!({ "barintensity": 1 }))] {
+        out.push(case(
+            &format!("colorbars.{id}"),
+            "F9",
+            "ColorBars: the middle of each bar and strip",
+            vec![with_knobs(NodeDef::new("B", "ColorBars"), knobs)],
+            vec![sample(
+                "B",
+                [
+                    (4..64).step_by(9).map(|x| (x, 50)).collect::<Vec<_>>(),
+                    (4..64).step_by(9).map(|x| (x, 18)).collect(),
+                    (1..64).step_by(3).map(|x| (x, 5)).collect(),
+                ]
+                .concat(),
+                &RGBA,
+            )],
+        ));
+    }
 }
 
 /// F12: Crop.

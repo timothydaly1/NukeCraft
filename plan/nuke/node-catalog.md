@@ -14,8 +14,9 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 | Read | ◐ | PNG, EXR; no frame range/before/after, proxy, DPX/TIFF/video [M9] |
 | Write | ◐ | PNG 8/16, EXR half/float; no views, metadata, render order [M9] |
 | Constant | ✅ | |
-| CheckerBoard (CheckerBoard2) | ◐ | Two colours; no color2/3, lines [M2] |
-| ColorBars, ColorWheel | — | [M2] |
+| CheckerBoard (CheckerBoard2) | ✅ | Four colours, lines, centre lines (F9) |
+| ColorBars | ◐ | SMPTE-style bars at `barintensity`; no PAL layout (F9) |
+| ColorWheel | — | |
 | Viewer | — | App feature [M1] |
 
 ## Draw

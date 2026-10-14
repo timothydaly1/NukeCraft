@@ -34,7 +34,7 @@ fn build(s: &mut Session) -> Result<()> {
     s.execute("node.create", &json!({ "class": "Merge", "inputs": ["Constant1", "Ramp1"], "knobs": { "operation": "plus" }, "x": 300, "y": 80 }))?;
     s.execute(
         "node.create",
-        &json!({ "class": "CheckerBoard", "x": 40, "y": 0, "knobs": { "format": "square_256", "boxsize": 32, "color0": [0.9, 0.35, 0.05, 1], "color1": [0.95, 0.85, 0.6, 1] } }),
+        &json!({ "class": "CheckerBoard", "x": 40, "y": 0, "knobs": { "format": "square_256", "boxsize": 32, "color0": [0.9, 0.35, 0.05, 1], "color1": [0.95, 0.85, 0.6, 1], "color2": [0.9, 0.35, 0.05, 1], "color3": [0.95, 0.85, 0.6, 1], "linewidth": 0, "centerlinewidth": 0 } }),
     )?;
     s.execute(
         "node.create",

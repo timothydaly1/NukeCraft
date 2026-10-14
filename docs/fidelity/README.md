@@ -1,9 +1,9 @@
 # Fidelity: checking NukeCraft against Nuke
 
-> **Last updated:** 2026-10-14 · **Harness:** ready (221 cases) · **Oracle numbers:** none yet
+> **Last updated:** 2026-10-14 · **Harness:** ready (225 cases) · **Oracle numbers:** none yet
 
 NukeCraft's tests pin its own behaviour; they can't show it matches Nuke. The fidelity harness
-(`crates/fidelity`) can: 221 synthetic cases (tiny graphs with Nuke's class and knob names on a
+(`crates/fidelity`) can: 225 synthetic cases (tiny graphs with Nuke's class and knob names on a
 64×64 format) are measured by NukeCraft and by Nuke, and compared value by value. Nuke's side is a
 generated Python script that writes one JSON file, the **oracle**; nothing else from Nuke is used
 or kept.
@@ -29,8 +29,8 @@ measuring behaviour for this open-source project fits its terms before you start
 
 The oracle holds only numbers measured on these synthetic graphs, plus the default values of the
 knobs NukeCraft implements (Nuke's own defaults, which the report compares with NukeCraft's). Cases
-for features NukeCraft doesn't have yet (Notch/Lanczos/Sinc filters, soft-light, the four-colour
-CheckerBoard, Exposure in densities and Cineon units) are measured too, so the numbers are waiting when the feature is built.
+for features NukeCraft doesn't have yet (Notch/Lanczos/Sinc filters, soft-light, Exposure in
+densities and Cineon units) are measured too, so the numbers are waiting when the feature is built.
 
 `nukecraft-cli fidelity run` prints NukeCraft's own numbers in the same format, for inspection.
 
@@ -44,7 +44,7 @@ CheckerBoard, Exposure in densities and Cineon units) are measured too, so the n
 | F6 | `animation.default` | The default interpolation of new keys, read every half frame |
 | F7 | `grade.*` (7), `saturation.*` (6), `premult`, `switch.which` | Grade's formula, gamma on negatives, reverse, clamps, mix; the four luminance formulas |
 | F8 | `merge.*` (62) | Every operation, in range and out of range (`.hdr`); mask and mix; A's edges outside its bbox |
-| F9, F10 | `checkerboard.*`, `ramp.*` | Box placement; the four Ramp profiles |
+| F9, F10 | `checkerboard.*` (4), `colorbars.*` (2), `ramp.*` | Box placement, the four colours, lines and centre lines; the colour bars' layout and values; the four Ramp profiles |
 | F12 | `crop.*` | Fractional crop boxes, the black border, reformat |
 | F13 | `colorcorrect.*` (8) | ColorCorrect over a colour ramp: each control, each range, master and range together |
 | F14 | `mask.*` (3), `unpremult.*` (4) | Mask input, `invert_mask` and mix on Grade and Merge; `unpremult` including a zero alpha |
@@ -73,7 +73,7 @@ knowledge, not yet compared with Nuke itself.
 | F6 | Animation | New keys default to Catmull-Rom; editing an animated knob keys the current frame | Nuke's default interpolation ("smooth") and its tangents |
 | F7 | Grade | Gamma applied to positive values only; reverse inverts the whole formula | Gamma on negatives; clamp order with `reverse` |
 | F8 | Merge | Same formula on alpha as on colour; `screen` falls back to max outside 0‥1; `divide` gives 0 on division by zero | Alpha handling per operation; `alpha masking`; `also merge` |
-| F9 | CheckerBoard | Two colours, boxes measured from the format centre | Four colours, line colours and widths, the box phase |
+| F9 | CheckerBoard, ColorBars | Boxes measured from the format centre; rows alternate colours 0/1 and 2/3 (shifted by a box); lines `linewidth` wide centred on box edges, centre lines through the format centre, both antialiased; ColorBars: SMPTE-style bars at `barintensity` with a reversed strip and a -I/white/+Q/pluge strip, values written as they are | Which box gets which colour; line placement and widths; the default line widths; ColorBars' layout, values and colour space |
 | F10 | Ramp | `smooth0`/`smooth1`/`smooth` as cubic ease curves; alpha ramps with the colour | The exact curves |
 | F11 | Read colour | PNG defaults to sRGB, EXR to linear; `premultiplied` divides by alpha around the conversion | Default colour spaces per file type in the current Nuke colour management |
 | F12 | Blur `crop`, Crop `black outside` | One-pixel black border added outside the box | Border handling with fractional boxes and `softness` |
