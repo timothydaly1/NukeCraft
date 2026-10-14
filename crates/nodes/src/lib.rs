@@ -17,6 +17,7 @@ mod blur;
 mod channel_nodes;
 mod color_math;
 mod color_nodes;
+mod draw;
 pub mod filter;
 mod image_nodes;
 pub mod knobs;
@@ -195,6 +196,7 @@ impl Registry {
             .chain(color_nodes::specs())
             .chain(color_math::specs())
             .chain(channel_nodes::specs())
+            .chain(draw::specs())
             .chain(merge::specs())
             .chain(transform::specs())
             .chain(blur::specs())
@@ -249,10 +251,16 @@ impl NodeSpec {
 /// `None` means no mask: the input is unconnected or the channel is `none`. A channel the mask
 /// image lacks reads as black.
 pub fn mask_factors(ctx: &Ctx, inputs: &[Option<Input>], index: usize, region: IRect) -> Option<Vec<f32>> {
+    mask_factors_by(ctx, inputs, index, region, "maskChannelInput", "invert_mask")
+}
+
+/// [`mask_factors`] with other knob names for the channel and the inversion (Keymix's
+/// `maskChannel` and `invertMask`).
+pub fn mask_factors_by(ctx: &Ctx, inputs: &[Option<Input>], index: usize, region: IRect, channel_knob: &str, invert_knob: &str) -> Option<Vec<f32>> {
     let m = input_image(inputs, index)?;
-    let chan = ChannelSet::parse(ctx.knobs.text("maskChannelInput"), m.image.channels()).ok()?.iter().next().cloned()?;
+    let chan = ChannelSet::parse(ctx.knobs.text(channel_knob), m.image.channels()).ok()?.iter().next().cloned()?;
     let ci = m.image.channels().index_of(&chan);
-    let invert = ctx.knobs.boolean("invert_mask");
+    let invert = ctx.knobs.boolean(invert_knob);
     let mut out = Vec::with_capacity(region.area() as usize);
     for y in region.y0..region.y1 {
         for x in region.x0..region.x1 {
@@ -351,6 +359,7 @@ mod tests {
             + color_nodes::specs().len()
             + color_math::specs().len()
             + channel_nodes::specs().len()
+            + draw::specs().len()
             + merge::specs().len()
             + transform::specs().len()
             + blur::specs().len()

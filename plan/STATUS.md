@@ -6,10 +6,10 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** M2.3 Keymix, Dissolve, Rectangle, Radial; M2.4 Reformat, Mirror2, Position, CornerPin2D; M2.5 time nodes;
+- **Next task:** M2.4 Reformat, Mirror2, Position, CornerPin2D; M2.5 time nodes;
   M2.6 filters. The G1 follow-ups in `docs/gaps.md` (Curve Editor, on-viewer handles, render
   progress) come after. When the oracle arrives, fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (127 tests, including headless UI and fidelity tests).
+- **Gate:** `cargo xtask ci` green (133 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -18,6 +18,8 @@
 
 ## Recently done
 
+- M2.3: Rectangle and Radial (Draw menu, with Ramp), Keymix, Dissolve; a format-relative knob default
+  (`area`); 18 more fidelity cases (F17).
 - M2.2: channel nodes: classic Shuffle, Copy (K), ChannelMerge, Remove; channels inside any layer
   order red, green, blue, alpha first; Nuke's built-in layers (`depth`, `motion`, `forward`,
   `backward`, `mask`) parse before an image has them; over the Node Graph, J/K/L go to the graph

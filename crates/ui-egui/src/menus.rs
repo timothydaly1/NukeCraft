@@ -69,7 +69,8 @@ fn needs_met(app: &NukecraftApp, id: &str) -> bool {
 
 fn nodes_menu(app: &mut NukecraftApp, ui: &mut egui::Ui) {
     let mut categories: Vec<&'static str> = app.session.registry.iter().map(|s| s.category).collect();
-    categories.sort_by_key(|c| theme::CATEGORY_ORDER.iter().position(|o| o == c).unwrap_or(usize::MAX));
+    // Nuke's toolbar order; any other category after them, by name (so duplicates are adjacent).
+    categories.sort_by_key(|c| (theme::CATEGORY_ORDER.iter().position(|o| o == c).unwrap_or(usize::MAX), *c));
     categories.dedup();
     let mut create = None;
     for cat in categories {

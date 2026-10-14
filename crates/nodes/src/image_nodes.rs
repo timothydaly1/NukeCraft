@@ -1,4 +1,4 @@
-//! Image ▸ generators: Constant, CheckerBoard, Ramp.
+//! Generators: Image ▸ Constant, CheckerBoard; Draw ▸ Ramp.
 
 use nukecraft_geom::{IRect, V2};
 use nukecraft_raster::{ChannelSet, Image};
@@ -68,7 +68,7 @@ pub fn specs() -> Vec<NodeSpec> {
             class: "Ramp",
             aliases: &[],
             label: "Ramp",
-            category: "Image",
+            category: "Draw",
             shortcut: None,
             help: "A gradient from black at p0 to `color` at p1.",
             inputs: &[],

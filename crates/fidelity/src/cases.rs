@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F16); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F17); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -67,6 +67,7 @@ pub fn cases() -> Vec<Case> {
     color_math(&mut out);
     masks(&mut out);
     channels(&mut out);
+    draw_and_mix(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -454,6 +455,90 @@ fn channels(out: &mut Vec<Case>) {
         vec![constant("C", src), NodeDef::new("R", "Remove").input(0, "C").knob("channels", json!("rgb"))],
         vec![sample("R", vec![(5, 5)], &RGBA)],
     ));
+}
+
+/// Points across a horizontal line, `x0..x1` at row `y`.
+fn span(x0: i32, x1: i32, y: i32) -> Vec<(i32, i32)> {
+    (x0..x1).map(|x| (x, y)).collect()
+}
+
+/// F17: Rectangle, Radial, Keymix, Dissolve.
+fn draw_and_mix(out: &mut Vec<Case>) {
+    let area = json!([10.3, 12.0, 41.6, 40.5]);
+    for (id, knobs) in [
+        ("hard", json!({})),
+        ("soft", json!({ "softness": 6 })),
+        ("opacity", json!({ "opacity": 0.4, "color": [1, 0.5, 0.25, 1] })),
+        ("invert", json!({ "invert": true })),
+    ] {
+        out.push(case(
+            &format!("rectangle.{id}"),
+            "F17",
+            "Rectangle over (10.3, 12)-(41.6, 40.5), no background",
+            vec![with_knobs(NodeDef::new("R", "Rectangle").knob("area", area.clone()), knobs)],
+            vec![sample("R", [span(0, 20, 20), span(36, 48, 20), (5..20).map(|y| (20, y)).collect(), (36..46).map(|y| (20, y)).collect()].concat(), &RGBA)],
+        ));
+    }
+    for (id, knobs) in
+        [("over", json!({ "opacity": 0.5, "color": [1, 0, 0, 1] })), ("replace", json!({ "opacity": 0.5, "color": [1, 0, 0, 1], "replace": true }))]
+    {
+        out.push(case(
+            &format!("rectangle.{id}"),
+            "F17",
+            "Rectangle on a Constant (0, 0, 0.5, 1) background",
+            vec![constant("Bg", [0.0, 0.0, 0.5, 1.0]), with_knobs(NodeDef::new("R", "Rectangle").input(0, "Bg").knob("area", area.clone()), knobs)],
+            vec![sample("R", vec![(5, 5), (20, 20), (10, 20)], &RGBA)],
+        ));
+    }
+    for (id, knobs) in [
+        ("default", json!({})),
+        ("hard", json!({ "softness": 0 })),
+        ("half", json!({ "softness": 0.5 })),
+        ("plinear", json!({ "plinear": true })),
+        ("ellipse", json!({ "area": [4, 20, 60, 44], "softness": 0.3 })),
+    ] {
+        out.push(case(
+            &format!("radial.{id}"),
+            "F17",
+            "Radial over (8, 8)-(56, 56) unless stated, no background",
+            vec![with_knobs(NodeDef::new("R", "Radial").knob("area", json!([8, 8, 56, 56])), knobs)],
+            vec![sample("R", [span(0, 64, 32), (0..32).map(|y| (32, y)).collect()].concat(), &["rgba.red", "rgba.alpha"])],
+        ));
+    }
+    let ab = || vec![constant("B", [0.0, 0.0, 1.0, 1.0]), constant("A", [1.0, 0.5, 0.0, 0.5]), hramp("M", [1.0, 1.0, 1.0, 1.0])];
+    for (id, knobs, mask) in [
+        ("mask", json!({ "maskChannel": "rgba.alpha" }), true),
+        ("invert", json!({ "maskChannel": "rgba.alpha", "invertMask": true, "mix": 0.5 }), true),
+        ("no_mask", json!({}), false),
+    ] {
+        let mut k = NodeDef::new("K", "Keymix").input(0, "B").input(1, "A");
+        if mask {
+            k = k.input(2, "M");
+        }
+        let mut nodes = ab();
+        nodes.push(with_knobs(k, knobs));
+        out.push(case(
+            &format!("keymix.{id}"),
+            "F17",
+            "Keymix of A (1, 0.5, 0, 0.5) into B (0, 0, 1, 1) through an alpha ramp",
+            nodes,
+            vec![sample("K", row(), &RGBA)],
+        ));
+    }
+    for which in [0.25, 0.5, 1.5, 2.0] {
+        out.push(case(
+            &format!("dissolve.{}", (which * 100.0) as i32),
+            "F17",
+            "Dissolve between three Constants (red, green, blue)",
+            vec![
+                constant("C0", [1.0, 0.0, 0.0, 1.0]),
+                constant("C1", [0.0, 1.0, 0.0, 1.0]),
+                constant("C2", [0.0, 0.0, 1.0, 0.5]),
+                NodeDef::new("D", "Dissolve").input(0, "C0").input(1, "C1").input(2, "C2").knob("which", json!(which)),
+            ],
+            vec![sample("D", vec![(5, 5)], &RGBA)],
+        ));
+    }
 }
 
 /// F8: every Merge operation, in range and out of range.

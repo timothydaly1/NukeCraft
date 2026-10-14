@@ -42,6 +42,17 @@ pub enum KnobDefault {
     FormatCenter,
     /// The root format's box (Crop's `box`).
     FormatBox,
+    /// A box at fractions of the root format: `[x, y, r, t]` times width and height
+    /// (Rectangle's `area`).
+    FormatFraction(&'static [f64; 4]),
+}
+
+impl KnobDefault {
+    /// Whether the default depends on the root format: such defaults are fixed when a node is
+    /// made, as Nuke does.
+    pub fn is_format_dependent(self) -> bool {
+        matches!(self, KnobDefault::FormatCenter | KnobDefault::FormatBox | KnobDefault::FormatFraction(_))
+    }
 }
 
 /// One knob of a node class.
@@ -109,6 +120,10 @@ impl KnobSpec {
                 KnobValue::numbers(&[c.x, c.y])
             }
             KnobDefault::FormatBox => KnobValue::numbers(&[0.0, 0.0, format.width as f64, format.height as f64]),
+            KnobDefault::FormatFraction([x, y, r, t]) => {
+                let (w, h) = (format.width as f64, format.height as f64);
+                KnobValue::numbers(&[x * w, y * h, r * w, t * h])
+            }
         }
     }
 

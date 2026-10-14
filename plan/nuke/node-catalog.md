@@ -22,8 +22,9 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Ramp | ◐ | No input/bbox options [M2] |
-| Rectangle, Radial | — | [M2] |
+| Ramp | ◐ | No bg/mask input or bbox options [M2] |
+| Rectangle | ◐ | Area, soft edges (linear, centred on the edge), opacity, replace, invert, bg and mask inputs; no `cliptype`, `premult`, ramp (F17) |
+| Radial | ◐ | Ellipse in `area`, softness, `plinear`, the same compositing as Rectangle; falloff curve unverified (F17) |
 | Roto, RotoPaint | — | [M2] (paint later) |
 | Noise, Text, Grain, Dither, Flare, Glint, LightWrap | — | |
 
@@ -87,7 +88,9 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 | Merge (Merge2) | ✅ | 29 operations (soft-light not yet); mask with invert; no A/B channel selection, also-merge, alpha masking |
 | Premult, Unpremult | ✅ | |
 | Switch | ✅ | |
-| Keymix, Dissolve, AddMix | — | [M2] |
+| Keymix | ✅ | Channels, mask (`maskChannel`, `invertMask`), mix, bbox |
+| Dissolve | ◐ | Any number of inputs; no mask or `channels` |
+| AddMix | — | |
 | ContactSheet, CopyRectangle, CopyBBox, MergeExpression, ZMerge | — | |
 
 ## Transform

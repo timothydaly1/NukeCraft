@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use nukecraft_curve::Interp;
 use nukecraft_geom::{Format, IRect};
 use nukecraft_graph::{KnobValue, NodeId, Script};
-use nukecraft_nodes::{KnobDefault, KnobKind, NodeSpec};
+use nukecraft_nodes::{KnobKind, NodeSpec};
 use nukecraft_render::{Renderer, with_render_stack};
 use nukecraft_time::{Fps, FrameRange, FrameTime, parse_frames};
 use serde_json::{Map, Value, json};
@@ -366,7 +366,7 @@ fn node_create(s: &mut Session, p: &Value) -> Result<Value> {
     // Format-dependent defaults are fixed when the node is made, as Nuke does.
     let format = s.script.root.format.clone();
     for k in knob_specs {
-        if matches!(k.default, KnobDefault::FormatCenter | KnobDefault::FormatBox)
+        if k.default.is_format_dependent()
             && let Some(n) = s.script.node_mut(id)
         {
             n.knobs.insert(k.name.into(), k.default_value(&format));

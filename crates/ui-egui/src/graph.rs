@@ -558,8 +558,11 @@ fn draw_pipes(app: &NukecraftApp, painter: &egui::Painter, view: View) {
         let slots = shown_inputs(app, n);
         for i in 0..slots {
             let (anchor, _) = input_anchor(rect, i, is_mask(app, n, i));
-            let label = if slots > 1 { Some(input_label(app, n, i)) } else { None };
-            let color = if is_mask(app, n, i) { theme::PIPE_MASK } else { theme::PIPE };
+            let mask = is_mask(app, n, i);
+            // An unconnected mask input is a bare arrow, as in Nuke; other inputs are labelled
+            // when there is more than one.
+            let label = if slots > 1 && !(mask && n.input(i).is_none()) { Some(input_label(app, n, i)) } else { None };
+            let color = if mask { theme::PIPE_MASK } else { theme::PIPE };
             match n.input(i).and_then(|u| script.node(u)) {
                 Some(up) => pipe(painter, view.node_rect(up).center_bottom(), anchor, color, 1.6, label.as_deref(), view.zoom),
                 None => {
