@@ -110,3 +110,22 @@ Commands are `area.verb` ids (`node.create`, `node.setKnob`, `render.execute`, `
 with a label, menu path, shortcut and a parameter description; `query.commands` lists them and the
 MCP server publishes them. The CLI's subcommands and the MCP `execute` tool are thin layers over
 `execute`. See [agents.md](agents.md).
+
+## 7. The desktop app
+
+`nukecraft-ui-egui` draws the whole window from `NukecraftApp::ui`: menus built from the command
+registry (each command's `menu` path) and the node registry (one Nodes submenu per category), the
+Viewer (centre), the Node Graph (bottom) and the Properties panel (right). The UI never edits the
+script itself: every change is `Session::execute` with a command id, so it is validated, atomic and
+undoable, and an agent could have done the same. Gestures that pass through many values (dragging a
+number, moving nodes, inserting a node and rewiring) are one undo step through undo groups
+(`Session::begin_group` / `end_group`).
+
+The Viewer renders on its own thread with a 64 MB stack and its own node registry. Requests carry a
+copy of the script; only the newest waiting request is rendered. Finished frames are cached by
+(script revision, node, time), so any edit invalidates them and nothing stale is shown.
+
+Every interactive element registers an automation id and rect each frame. The control channel
+(`--control PORT`) and the headless harness (`snapshot::Headless`) click, drag and type by id; the
+harness also rasterises egui's triangles on the CPU, which lets agents and tests look at the UI
+without a display or GPU (it matches the real window, checked under Xvfb).

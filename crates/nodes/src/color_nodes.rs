@@ -59,7 +59,7 @@ pub fn specs() -> Vec<NodeSpec> {
             label: "Grade",
             category: "Color",
             shortcut: Some("G"),
-            help: "Maps blackpoint‥whitepoint to lift‥gain, then multiply, offset and gamma.",
+            help: "Maps blackpoint..whitepoint to lift..gain, then multiply, offset and gamma.",
             inputs: INPUT,
             extra_inputs: false,
             knobs: GRADE_KNOBS,

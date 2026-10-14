@@ -75,6 +75,7 @@ impl Headless {
             vp.native_pixels_per_point = Some(self.pixels_per_point);
         }
         input.events = std::mem::take(&mut self.pending);
+        input.events.extend(self.app.take_injected());
         let app = &mut self.app;
         let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
         self.time += 1.0 / 60.0;

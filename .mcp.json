@@ -3,6 +3,10 @@
     "nukecraft": {
       "command": "cargo",
       "args": ["run", "--quiet", "--release", "-p", "nukecraft-cli", "--", "mcp", "--demo"]
+    },
+    "nukecraft-app": {
+      "command": "cargo",
+      "args": ["run", "--quiet", "--release", "-p", "nukecraft-cli", "--", "mcp", "--bridge", "9877"]
     }
   }
 }

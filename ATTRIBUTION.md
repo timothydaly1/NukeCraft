@@ -9,6 +9,7 @@ Foundry iconography, images or other Foundry assets; open licences only; every a
 
 | Asset | Author | Source | Licence |
 |---|---|---|---|
+| `docs/images/nukecraft-app.png` | NukeCraft contributors | Original work: the NukeCraft app with the demo script, captured by its headless snapshot tool | MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`) |
 | `docs/images/nukecraft-demo.png` | NukeCraft contributors | Original work: frame 12 of the demo script, rendered by NukeCraft | MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`) |
 
 ## Code-drawn and procedural content

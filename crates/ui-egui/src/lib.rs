@@ -11,6 +11,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod automation;
+pub mod control;
 mod dialogs;
 mod graph;
 pub mod keys;
@@ -47,6 +48,11 @@ pub struct NukecraftApp {
     pub(crate) graph: graph::GraphState,
     pub(crate) viewer: viewer::ViewerState,
     pub(crate) props: properties::PropsState,
+    control: Option<control::ControlServer>,
+    /// Input queued by the control channel, one batch per frame.
+    injected: Vec<Vec<egui::Event>>,
+    /// Screenshot requests waiting for eframe: (path, request id, reply).
+    screenshots: Vec<(String, Value, std::sync::mpsc::Sender<Value>)>,
     pub(crate) dialogs: dialogs::Dialogs,
     status: Option<Status>,
     shortcuts: Vec<(KeyboardShortcut, &'static str)>,
@@ -104,6 +110,9 @@ impl NukecraftApp {
             graph: graph::GraphState::default(),
             viewer: viewer::ViewerState::new(ctx),
             props: properties::PropsState::default(),
+            control: None,
+            injected: Vec::new(),
+            screenshots: Vec::new(),
             dialogs: dialogs::Dialogs::default(),
             status: None,
             shortcuts,
@@ -131,6 +140,7 @@ impl NukecraftApp {
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
         self.automation.begin_frame();
+        self.handle_control(&ctx);
         self.prune();
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);

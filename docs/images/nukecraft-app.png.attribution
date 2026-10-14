@@ -1,0 +1,8 @@
+asset:        nukecraft-app.png
+title:        The NukeCraft desktop app showing the demo script at frame 12
+author:       NukeCraft contributors
+source:       original work
+license:      MIT OR Apache-2.0
+license-file: LICENSE-MIT, LICENSE-APACHE
+added:        2026-10-14 by NukeCraft contributors
+notes:        Captured headless by NukeCraft's own snapshot tool (crates/ui-egui/examples/snapshot.rs) with the demo script; Viewer, Node Graph and Properties (Transform1, Merge2) panels. Shows only NukeCraft and procedural content.

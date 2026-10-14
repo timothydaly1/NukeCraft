@@ -8,7 +8,13 @@ atomic).
 
 `nukecraft-cli mcp [SCRIPT.ncs | --demo]` speaks the Model Context Protocol over stdio (JSON-RPC 2.0,
 one message per line). This repository ships a ready [`.mcp.json`](../.mcp.json) that starts it with
-the demo script.
+the demo script (build it once first, `cargo build --release -p nukecraft-cli`, or the first start
+can outlast the client's connection timeout).
+
+**Driving the running app:** start the desktop app with `nukecraft --control 9877` and the MCP
+server with `nukecraft-cli mcp --bridge 9877` (the `nukecraft-app` entry in `.mcp.json`). The tools
+then act on the app's script, so an agent and a person work on the same comp: edits appear in the
+Node Graph and Viewer at once, and `render_image` renders what the app has.
 
 | Tool | Arguments | Returns |
 |---|---|---|
@@ -48,7 +54,8 @@ Results are JSON on stdout; errors go to stderr with exit code 1 (2 for usage er
 - **Names:** Nuke's class and knob names (`Merge2`, `CheckerBoard2`, `black_clamp`); menu names work
   too (`Merge`, `CheckerBoard`).
 
-## Not yet
+## The desktop app's control channel and headless snapshots
 
-A control channel into a running desktop app (with screenshots and widget automation ids) arrives
-with the app in M1, bridged into the MCP server as EffectCraft's `--bridge` is.
+Below MCP, the app's control channel ([control-protocol.md](control-protocol.md)) also clicks and
+types into the UI by automation id and takes screenshots. The same requests drive the UI headless
+through `cargo run -p nukecraft-ui-egui --example snapshot`, which needs no display or GPU.

@@ -21,6 +21,11 @@ impl eframe::App for Shell {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.0.ui(ui);
     }
+
+    /// Input from the control channel joins the window's own.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        raw_input.events.extend(self.0.take_injected());
+    }
 }
 
 fn main() -> ExitCode {
@@ -28,9 +33,23 @@ fn main() -> ExitCode {
     let verbose = take_flag(&mut args, &["-v", "--verbose"]);
     init_logging(if verbose { log::LevelFilter::Info } else { log::LevelFilter::Warn });
     if take_flag(&mut args, &["-h", "--help"]) {
-        println!("usage: nukecraft [SCRIPT.ncs | --demo] [-v]");
+        println!("usage: nukecraft [SCRIPT.ncs | --demo] [--control PORT] [-v]");
         return ExitCode::SUCCESS;
     }
+    let control = match take_value(&mut args, "--control") {
+        Ok(None) => None,
+        Ok(Some(p)) => match p.parse::<u16>() {
+            Ok(port) => Some(port),
+            Err(_) => {
+                eprintln!("error: --control takes a port number");
+                return ExitCode::from(2);
+            }
+        },
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let demo = take_flag(&mut args, &["--demo"]);
     let session = if demo {
         demo_session()
@@ -55,7 +74,20 @@ fn main() -> ExitCode {
     // that is an error to report, not a crash.
     std::panic::set_hook(Box::new(|info| log::error!("{info}")));
     let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        eframe::run_native("NukeCraft", options, Box::new(move |cc| Ok(Box::new(Shell(NukecraftApp::new(&cc.egui_ctx, session))))))
+        eframe::run_native(
+            "NukeCraft",
+            options,
+            Box::new(move |cc| {
+                let mut app = NukecraftApp::new(&cc.egui_ctx, session);
+                if let Some(port) = control {
+                    match app.start_control(&cc.egui_ctx, port) {
+                        Ok(p) => eprintln!("control channel: 127.0.0.1:{p}"),
+                        Err(e) => eprintln!("error: {e}"),
+                    }
+                }
+                Ok(Box::new(Shell(app)))
+            }),
+        )
     }));
     match run {
         Ok(Ok(())) => ExitCode::SUCCESS,
@@ -68,6 +100,12 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn take_value(args: &mut Vec<String>, name: &str) -> Result<Option<String>, String> {
+    let Some(i) = args.iter().position(|a| a == name) else { return Ok(None) };
+    args.remove(i);
+    if i < args.len() { Ok(Some(args.remove(i))) } else { Err(format!("{name} needs a value")) }
 }
 
 fn take_flag(args: &mut Vec<String>, names: &[&str]) -> bool {

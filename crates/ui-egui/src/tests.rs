@@ -310,3 +310,50 @@ mod properties {
         assert_eq!(knob(&h, "Write1", "file"), Some(KnobValue::text("out/comp.####.exr")));
     }
 }
+
+mod control {
+    use super::*;
+    use serde_json::{Value, json};
+    use std::io::{BufRead, BufReader, Write};
+
+    #[test]
+    fn requests_drive_the_app() {
+        let mut h = demo();
+        let ctx = h.ctx().clone();
+        let port = h.app.start_control(&ctx, 0).unwrap();
+        let client = std::thread::spawn(move || {
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut out = stream;
+            let mut ask = |req: Value| -> Value {
+                writeln!(out, "{req}").unwrap();
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                serde_json::from_str(&line).unwrap()
+            };
+            let a = ask(
+                json!({ "id": 1, "method": "engine.execute", "params": { "command": "node.create", "params": { "class": "Blur", "inputs": ["Grade1"] } } }),
+            );
+            let b = ask(json!({ "id": 2, "method": "app.view", "params": { "node": "Blur2" } }));
+            let c = ask(json!({ "id": 3, "method": "ui.click", "params": { "id": "graph.node.Merge1" } }));
+            let d = ask(json!({ "id": 4, "method": "nope" }));
+            let e = ask(json!({ "id": 5, "method": "app.state" }));
+            (a, b, c, d, e)
+        });
+        // The UI thread answers between frames.
+        let start = std::time::Instant::now();
+        while !client.is_finished() && start.elapsed() < Duration::from_secs(30) {
+            h.frame();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let (a, b, c, d, e) = client.join().unwrap();
+        assert_eq!(a["id"], 1);
+        assert_eq!(a["result"]["name"], "Blur2");
+        assert_eq!(b["result"], json!({}));
+        assert_eq!(c["result"], json!({}));
+        assert!(d["error"].as_str().unwrap().contains("unknown method"));
+        assert_eq!(e["result"]["viewed"], "Blur2");
+        h.frames(8);
+        assert_eq!(h.app.selected_names(), ["Merge1"], "the injected click selected Merge1");
+    }
+}

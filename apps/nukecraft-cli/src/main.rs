@@ -27,6 +27,8 @@ USAGE:
   nukecraft-cli nodes                                 node classes and their knobs (JSON)
   nukecraft-cli commands                              engine commands (JSON)
   nukecraft-cli mcp [SCRIPT.ncs | --demo]             MCP server on stdin/stdout
+  nukecraft-cli mcp --bridge PORT                     MCP server driving a running app
+                                                      (started with `nukecraft --control PORT`)
 
 OPTIONS:
   -v, --verbose    log progress to stderr
@@ -148,6 +150,14 @@ fn run(mut args: Vec<String>) -> Result<Option<Value>, Failure> {
         "commands" => Ok(Some(Session::new().execute("query.commands", &json!({}))?)),
         "mcp" => {
             let demo = take_flag(&mut args, &["--demo"]);
+            if let Some(port) = take_opt(&mut args, "--bridge")? {
+                let port: u16 = port.parse().map_err(|_| usage("--bridge takes a port number"))?;
+                let bridge = nukecraft_automation::Bridge::connect(port)
+                    .map_err(|e| Failure::Run(format!("could not reach the app on 127.0.0.1:{port} ({e}); start it with `nukecraft --control {port}`")))?;
+                let stdin = std::io::stdin();
+                Server::bridged(bridge).serve(stdin.lock(), std::io::stdout().lock()).map_err(|e| Failure::Run(e.to_string()))?;
+                return Ok(None);
+            }
             let session = if demo {
                 demo_session()?
             } else if let Some(path) = args.first() {

@@ -8,11 +8,14 @@
 //! - `list_commands`, `node_classes` and `get_script` describe what exists;
 //! - `render_image` returns a node's output as a PNG the agent can look at.
 //!
-//! See `docs/agents.md`.
+//! With `--bridge PORT` the server drives a running desktop app through its control channel
+//! (`nukecraft --control PORT`) instead of a session of its own, so an agent and a person work on
+//! the same script and the agent sees the app's state. See `docs/agents.md`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
 
 use base64::Engine as _;
 use nukecraft_color::Colorspace;
@@ -36,14 +39,67 @@ const INSTRUCTIONS: &str = "NukeCraft is a node-based compositor in the spirit o
 Merge's input 0 is B (background) and input 1 is A (foreground). Coordinates are pixels with y up from the bottom-left. \
 Use `render_image` to look at any node's output.";
 
-/// An MCP server over one session.
+/// What the tools act on: a session of the server's own, or a running app.
+pub enum Backend {
+    Local(Box<Session>),
+    Bridge(Bridge),
+}
+
+/// A connection to a running app's control channel.
+pub struct Bridge {
+    reader: BufReader<TcpStream>,
+    writer: TcpStream,
+    next_id: u64,
+}
+
+impl Bridge {
+    /// Connects to `127.0.0.1:port`.
+    pub fn connect(port: u16) -> std::io::Result<Bridge> {
+        let writer = TcpStream::connect(("127.0.0.1", port))?;
+        let reader = BufReader::new(writer.try_clone()?);
+        Ok(Bridge { reader, writer, next_id: 1 })
+    }
+
+    /// One control request and its reply.
+    pub fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let line = json!({ "id": id, "method": method, "params": params });
+        writeln!(self.writer, "{line}").and_then(|_| self.writer.flush()).map_err(|e| format!("bridge: {e}"))?;
+        let mut reply = String::new();
+        let n = self.reader.read_line(&mut reply).map_err(|e| format!("bridge: {e}"))?;
+        if n == 0 {
+            return Err("bridge: the app closed the connection".into());
+        }
+        let v: Value = serde_json::from_str(&reply).map_err(|e| format!("bridge: bad reply: {e}"))?;
+        match v.get("error") {
+            Some(e) => Err(e.as_str().map_or_else(|| e.to_string(), str::to_string)),
+            None => Ok(v.get("result").cloned().unwrap_or(Value::Null)),
+        }
+    }
+}
+
+/// An MCP server.
 pub struct Server {
-    pub session: Session,
+    backend: Backend,
 }
 
 impl Server {
     pub fn new(session: Session) -> Server {
-        Server { session }
+        Server { backend: Backend::Local(Box::new(session)) }
+    }
+
+    /// A server that drives a running app.
+    pub fn bridged(bridge: Bridge) -> Server {
+        Server { backend: Backend::Bridge(bridge) }
+    }
+
+    /// Runs an engine command on the backend.
+    fn execute(&mut self, command: &str, params: &Value) -> Result<Value, String> {
+        match &mut self.backend {
+            Backend::Local(s) => s.execute(command, params).map_err(|e| e.to_string()),
+            Backend::Bridge(b) => b.call("engine.execute", json!({ "command": command, "params": params })),
+        }
     }
 
     /// Serves requests from `input` until it closes, writing responses to `output`.
@@ -106,11 +162,11 @@ impl Server {
                     return Ok(tool_error("`command` (a command id such as node.create) is required"));
                 };
                 let p = args.get("params").cloned().unwrap_or_else(|| json!({}));
-                self.session.execute(command, &p).map_err(|e| e.to_string())
+                self.execute(command, &p)
             }
-            "list_commands" => self.session.execute("query.commands", &json!({})).map_err(|e| e.to_string()),
-            "node_classes" => self.session.execute("query.nodeClasses", &json!({})).map_err(|e| e.to_string()),
-            "get_script" => self.session.execute("query.script", &json!({})).map_err(|e| e.to_string()),
+            "list_commands" => self.execute("query.commands", &json!({})),
+            "node_classes" => self.execute("query.nodeClasses", &json!({})),
+            "get_script" => self.execute("query.script", &json!({})),
             "render_image" => return Ok(self.render_image(&args)),
             other => return Err((-32602, format!("unknown tool `{other}`"))),
         };
@@ -122,35 +178,56 @@ impl Server {
 
     fn render_image(&mut self, args: &Value) -> Value {
         let Some(name) = args.get("node").and_then(Value::as_str) else { return tool_error("`node` is required") };
-        let id = match self.session.script.id_of(name) {
-            Ok(id) => id,
-            Err(e) => return tool_error(&e.to_string()),
-        };
-        let t = args.get("frame").and_then(Value::as_f64).map_or(self.session.time, FrameTime::from_f64);
         let max = args.get("max_size").and_then(Value::as_u64).map_or(DEFAULT_MAX_SIZE, |m| m.clamp(16, 4096) as u32);
-        let (script, registry) = (&self.session.script, &self.session.registry);
-        let rendered = match with_render_stack(|| Renderer::new(script, registry).render_format(id, t)) {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => return tool_error(&e.to_string()),
+        let frame = args.get("frame").and_then(Value::as_f64);
+        let rendered = match &mut self.backend {
+            Backend::Local(session) => render_local(session, name, frame),
+            Backend::Bridge(bridge) => render_bridged(bridge, name, frame),
+        };
+        let (rgba, w, h, caption) = match rendered {
+            Ok(r) => r,
             Err(e) => return tool_error(&e),
         };
-        let (info, img) = rendered;
-        let (w, h) = (info.format.width, info.format.height);
-        let rgba = to_rgba8(&img, &info.format, Colorspace::Srgb);
         let (sw, sh, small) = downsample(&rgba, w, h, max);
         let png = match nukecraft_io::encode_png_rgba8(sw, sh, &small) {
             Ok(p) => p,
             Err(e) => return tool_error(&e.to_string()),
         };
-        let caption = format!("{name} at frame {t}: format {w}×{h}, bbox {:?}, channels {}, shown at {sw}×{sh}", info.bbox, info.channels.to_knob_string());
         json!({
             "content": [
                 { "type": "image", "data": base64::engine::general_purpose::STANDARD.encode(png), "mimeType": "image/png" },
-                { "type": "text", "text": caption },
+                { "type": "text", "text": format!("{caption}, shown at {sw}×{sh}") },
             ],
             "isError": false,
         })
     }
+}
+
+/// Renders a node of the local session: (sRGB RGBA8, width, height, caption).
+fn render_local(session: &Session, name: &str, frame: Option<f64>) -> Result<(Vec<u8>, u32, u32, String), String> {
+    let id = session.script.id_of(name).map_err(|e| e.to_string())?;
+    let t = frame.map_or(session.time, FrameTime::from_f64);
+    let (script, registry) = (&session.script, &session.registry);
+    let (info, img) = with_render_stack(|| Renderer::new(script, registry).render_format(id, t))?.map_err(|e| e.to_string())?;
+    let (w, h) = (info.format.width, info.format.height);
+    let caption = format!("{name} at frame {t}: format {w}×{h}, bbox {:?}, channels {}", info.bbox, info.channels.to_knob_string());
+    Ok((to_rgba8(&img, &info.format, Colorspace::Srgb), w, h, caption))
+}
+
+/// Renders a node in the running app (render.frame to a temporary EXR, read back).
+fn render_bridged(bridge: &mut Bridge, name: &str, frame: Option<f64>) -> Result<(Vec<u8>, u32, u32, String), String> {
+    let path = std::env::temp_dir().join(format!("nukecraft-mcp-{}-{name}.exr", std::process::id()));
+    let mut params = json!({ "node": name, "path": path.display().to_string() });
+    if let Some(f) = frame {
+        params["frame"] = json!(f);
+    }
+    bridge.call("engine.execute", json!({ "command": "render.frame", "params": params }))?;
+    let decoded = nukecraft_io::read_image(&path, None, false).map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&path);
+    let d = decoded?;
+    let (w, h) = (d.format.width, d.format.height);
+    let caption = format!("{name} (in the running app): format {w}×{h}, bbox {:?}", d.image.bbox());
+    Ok((to_rgba8(&d.image, &d.format, Colorspace::Srgb), w, h, caption))
 }
 
 fn tool_error(message: &str) -> Value {
@@ -315,6 +392,38 @@ mod tests {
         assert_eq!(lines[0]["result"], json!({}));
         assert_eq!(lines[1]["error"]["code"], -32700);
         assert!(lines[2]["result"]["tools"].is_array());
+    }
+
+    #[test]
+    fn bridge_forwards_to_the_app() {
+        // A stand-in for the app's control channel: answers engine.execute with its params.
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut out = stream;
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap() > 0 {
+                let req: Value = serde_json::from_str(&line).unwrap();
+                let reply = if req["params"]["command"] == "fail" {
+                    json!({ "id": req["id"], "error": "no such thing" })
+                } else {
+                    json!({ "id": req["id"], "result": { "echo": req["params"] } })
+                };
+                writeln!(out, "{reply}").unwrap();
+                line.clear();
+            }
+        });
+        let mut s = Server::bridged(Bridge::connect(port).unwrap());
+        let r = call(&mut s, 1, "tools/call", json!({ "name": "execute", "arguments": { "command": "node.create", "params": { "class": "Blur" } } }));
+        assert_eq!(r["result"]["isError"], false);
+        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("node.create"));
+        let r = call(&mut s, 2, "tools/call", json!({ "name": "execute", "arguments": { "command": "fail" } }));
+        assert_eq!(r["result"]["isError"], true);
+        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("no such thing"));
+        drop(s);
+        app.join().unwrap();
     }
 
     #[test]

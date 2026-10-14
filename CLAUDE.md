@@ -54,8 +54,10 @@ asset licensed and attributed (`cargo xtask assets`).
 - `cargo run -p nukecraft-cli -- exec node.create '{"class":"Blur","inputs":["Grade1"]}' demo.ncs --save`
   runs any engine command against a script.
 - `cargo run -p nukecraft-cli -- mcp --demo` serves MCP on stdio ([`.mcp.json`](.mcp.json) wires it up).
-- `cargo run -p nukecraft -- --demo` opens the desktop app (eframe, OpenGL; on Linux it needs a
-  display and libxkbcommon-x11).
+- `cargo run -p nukecraft -- --demo --control 9877` opens the desktop app (eframe, OpenGL; on Linux
+  it needs a display and libxkbcommon-x11) with its control channel ([`docs/control-protocol.md`](docs/control-protocol.md));
+  `nukecraft-cli mcp --bridge 9877` drives it over MCP. In a container, run it under `Xvfb` (Mesa's
+  software GL works).
 - For UI work, **look at the result** headless — no window, no GPU:
   `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step '{"method":"ui.click","params":{"id":"menu.Nodes"}}'`
   (steps: `engine.execute`, `ui.click`, `ui.drag`, `ui.key`, `ui.text`, `ui.hover`, `ui.inspect`, `snap`;

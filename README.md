@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/nukecraft-demo.png" alt="Frame 12 of the NukeCraft demo script: an orange and cream checkerboard, rotated about 43 degrees, merged over a dark-to-blue vertical gradient" width="640">
-  <br><sub>Frame 12 of the demo script, rendered by NukeCraft: CheckerBoard → Transform (animated) → Merge over Constant + Ramp → Grade → Blur → Write.</sub>
+  <img src="docs/images/nukecraft-app.png" alt="The NukeCraft app: the Viewer shows frame 12 of the demo, a rotated orange and cream checkerboard over a blue gradient; the Node Graph below shows the demo's nodes; the Properties panel on the right shows Transform1's knobs with an animated rotate and Merge2's knobs" width="100%">
+  <br><sub>The desktop app with the demo script: Viewer, Node Graph and Properties.</sub>
 </p>
 
 ## What NukeCraft is
@@ -37,12 +37,17 @@ frontend, agent control from day one, strict clean-room and asset rules, and a s
 
 ## Where it stands
 
-**Pre-alpha.** The engine foundation is done and tested; there is no desktop app yet. Honest numbers
-are in [ROADMAP.md](ROADMAP.md) and the shortfalls in [docs/gaps.md](docs/gaps.md).
+**Pre-alpha.** The engine and a first desktop app work and are tested; the node library is small
+and nothing has been compared with Nuke yet. Honest numbers are in [ROADMAP.md](ROADMAP.md) and the
+shortfalls in [docs/gaps.md](docs/gaps.md).
 
-What works today, headless:
+What works today:
 
-- **13 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Grade, Saturation, Premult,
+- **The desktop app:** a Node Graph (Tab search, B/G/M/T/./R/W to insert nodes, drag to connect,
+  box select, 1 to view), a Viewer rendering on its own thread (channels, exposure, gamma, pixel
+  readout, timeline and playback), a Properties panel (every knob kind, keys, one undo step per
+  drag), menus built from the command registry, undo/redo, autosave.
+- **15 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Grade, Saturation, Premult,
   Unpremult, Merge (29 operations, mask input), Transform (six cubic filters + impulse, black outside),
   Blur (four kernels), Crop, Switch, Dot.
 - **Nuke's image model:** bbox vs format, edge repeat outside the bbox, region-of-interest rendering,
@@ -58,6 +63,7 @@ What works today, headless:
 You need [Rust](https://rustup.rs/) 1.95 or newer.
 
 ```sh
+cargo run -p nukecraft -- --demo                                # the desktop app, with the demo
 cargo run -p nukecraft-cli -- demo demo.ncs
 cargo run -p nukecraft-cli -- frame demo.ncs --node Write1 --frame 12 --out frame12.png
 cargo run -p nukecraft-cli -- exec node.setKnob '{"node":"Blur1","knob":"size","value":8}' demo.ncs --save
@@ -69,7 +75,10 @@ cargo run -p nukecraft-cli -- nodes                             # every node cla
 
 `nukecraft-cli mcp --demo` speaks the Model Context Protocol over stdio; this repository ships a ready
 [`.mcp.json`](.mcp.json). An agent can list node classes, create and connect nodes, set and animate
-knobs, render any node to a PNG it can look at, undo, and save. See [docs/agents.md](docs/agents.md).
+knobs, render any node to a PNG it can look at, undo, and save. With `nukecraft --control 9877` and
+`nukecraft-cli mcp --bridge 9877` the agent works inside the running app, next to a person. The
+UI can also run headless (`cargo run -p nukecraft-ui-egui --example snapshot`) so agents can click
+through it and look at it without a display. See [docs/agents.md](docs/agents.md).
 
 ## How it's made
 
@@ -80,7 +89,8 @@ knobs, render any node to a PNG it can look at, undo, and save. See [docs/agents
 | L2 | `graph` (the script and `.ncs`), `nodes` (the node registry and built-in nodes) |
 | L3 | `render` (pull-based evaluation), `io` (PNG, EXR, Read, Write) |
 | L4 | `engine` (session, undo, commands) |
-| L5–L6 | `automation` (MCP), `nukecraft-cli` |
+| L5 | `automation` (MCP), `ui-egui` (the desktop interface, headless snapshots) |
+| L6 | `nukecraft` (desktop app), `nukecraft-cli` |
 
 Details in [docs/architecture.md](docs/architecture.md). Contributors (people and agents) start with
 [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md); the plan lives in [plan/](plan/).

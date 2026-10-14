@@ -344,6 +344,16 @@ mod tests {
     }
 
     #[test]
+    fn ui_text_is_plain_ascii() {
+        // Labels and help show in the UI; its fonts lack many symbols (they draw as boxes).
+        for spec in Registry::builtin().iter() {
+            for text in [spec.label, spec.help].into_iter().chain(spec.knobs.iter().flat_map(|k| [k.label, k.help])) {
+                assert!(text.is_ascii(), "{}: non-ASCII UI text {text:?}", spec.class);
+            }
+        }
+    }
+
+    #[test]
     fn register_refuses_duplicates() {
         let mut r = Registry::builtin();
         let spec = NodeSpec {
