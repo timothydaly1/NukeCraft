@@ -75,6 +75,11 @@ pub struct Session {
     pub dirty: bool,
     /// What loading the script repaired.
     pub load_warnings: Vec<String>,
+    /// Bumped every time the script changes (edits, undo, open), so views can tell their caches
+    /// are stale without comparing scripts.
+    pub revision: u64,
+    /// An open undo group: its label and the script before it began.
+    group: Option<(String, Script)>,
     undo: Vec<(String, Script)>,
     redo: Vec<(String, Script)>,
     journal: Vec<Value>,
@@ -96,6 +101,8 @@ impl Session {
             time: FrameTime::from_frame(1),
             dirty: false,
             load_warnings: Vec::new(),
+            revision: 0,
+            group: None,
             undo: Vec::new(),
             redo: Vec::new(),
             journal: Vec::new(),
@@ -122,9 +129,14 @@ impl Session {
         };
         match result {
             Ok(v) => {
-                if spec.undoable && self.script != before {
-                    self.push_undo(spec.label, before);
-                    self.dirty = true;
+                if self.script != before {
+                    self.revision = self.revision.wrapping_add(1);
+                    if spec.undoable {
+                        self.dirty = true;
+                        if self.group.is_none() {
+                            self.push_undo(spec.label, before);
+                        }
+                    }
                 }
                 if spec.journal {
                     if self.journal.len() >= MAX_JOURNAL {
@@ -149,6 +161,28 @@ impl Session {
         self.redo.clear();
     }
 
+    /// Starts an undo group: until [`Session::end_group`], undoable commands change the script
+    /// without pushing undo steps, and the group becomes one step labelled `label` (a slider drag,
+    /// a node drag, a node inserted and rewired). Nested calls join the open group.
+    pub fn begin_group(&mut self, label: &str) {
+        if self.group.is_none() {
+            self.group = Some((label.to_string(), self.script.clone()));
+        }
+    }
+
+    /// Ends the open undo group, pushing one undo step if the script changed during it.
+    pub fn end_group(&mut self) {
+        if let Some((label, before)) = self.group.take()
+            && self.script != before
+        {
+            self.push_undo(&label, before);
+        }
+    }
+
+    pub fn in_group(&self) -> bool {
+        self.group.is_some()
+    }
+
     /// Undo step labels, oldest first.
     pub fn history(&self) -> Vec<&str> {
         self.undo.iter().map(|(l, _)| l.as_str()).collect()
@@ -161,11 +195,13 @@ impl Session {
 
     /// Forgets undo history (after opening a script, or building the demo).
     pub fn clear_history(&mut self) {
+        self.group = None;
         self.undo.clear();
         self.redo.clear();
     }
 
     pub(crate) fn undo_step(&mut self) -> Option<String> {
+        self.end_group();
         let (label, prev) = self.undo.pop()?;
         let cur = std::mem::replace(&mut self.script, prev);
         self.redo.push((label.clone(), cur));
@@ -174,6 +210,7 @@ impl Session {
     }
 
     pub(crate) fn redo_step(&mut self) -> Option<String> {
+        self.end_group();
         let (label, next) = self.redo.pop()?;
         let cur = std::mem::replace(&mut self.script, next);
         self.undo.push((label.clone(), cur));
@@ -182,7 +219,7 @@ impl Session {
     }
 
     pub(crate) fn can_undo(&self) -> bool {
-        !self.undo.is_empty()
+        !self.undo.is_empty() || self.group.as_ref().is_some_and(|(_, before)| *before != self.script)
     }
 
     pub(crate) fn can_redo(&self) -> bool {

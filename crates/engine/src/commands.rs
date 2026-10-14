@@ -154,7 +154,7 @@ static SPECS: &[CommandSpec] = &[
     edit("node.resetKnob", "Reset Knob to Default", &[], None, "{node, knob}", node_reset_knob),
     edit("node.removeKey", "Delete Key", &[], None, "{node, knob, frame}", node_remove_key),
     edit("node.clearAnimation", "No Animation", &[], None, "{node, knob} — keeps the value at the current frame", node_clear_animation),
-    edit("node.move", "Move Node", &[], None, "{node, x, y} — position in the node graph", node_move),
+    edit("node.move", "Move Node", &[], None, "{node, x, y} | {moves: [{node, x, y}]} — positions in the node graph, one undo step", node_move),
     edit("node.label", "Set Label", &[], None, "{node, label}", node_label),
     // Time and rendering
     action("time.goto", "Go to Frame", &[], None, "{frame}", time_goto),
@@ -498,10 +498,16 @@ fn node_clear_animation(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn node_move(s: &mut Session, p: &Value) -> Result<Value> {
-    let id = params::node(&s.script, p, "node")?;
-    let (x, y) = (params::f64(p, "x")?, params::f64(p, "y")?);
-    if let Some(n) = s.script.node_mut(id) {
-        (n.x, n.y) = (x, y);
+    let moves: Vec<&Value> = match p.get("moves") {
+        Some(list) => list.as_array().ok_or_else(|| bad("`moves` must be a list of {node, x, y}"))?.iter().collect(),
+        None => vec![p],
+    };
+    for m in moves {
+        let id = params::node(&s.script, m, "node")?;
+        let (x, y) = (params::f64(m, "x")?, params::f64(m, "y")?);
+        if let Some(n) = s.script.node_mut(id) {
+            (n.x, n.y) = (x, y);
+        }
     }
     Ok(json!({}))
 }

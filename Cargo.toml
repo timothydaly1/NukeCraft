@@ -23,6 +23,7 @@ nukecraft-render = { path = "crates/render" }
 nukecraft-io = { path = "crates/io" }
 nukecraft-engine = { path = "crates/engine" }
 nukecraft-automation = { path = "crates/automation" }
+nukecraft-ui-egui = { path = "crates/ui-egui" }
 
 # foundation
 thiserror = "2"
@@ -30,6 +31,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 log = "0.4"
 base64 = "0.22"
+
+# ui (only crates in L5 and above may use these; `cargo xtask layers` checks)
+egui = "0.36"
+eframe = { version = "0.36", default-features = false }
+# xdg-portal only: the wayland feature links libwayland-client at build time.
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 # image formats (pure Rust, permissive licences)
 png = "0.18"

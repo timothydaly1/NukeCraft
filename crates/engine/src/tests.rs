@@ -159,3 +159,28 @@ fn queries_describe_everything() {
     assert!(s.history().is_empty());
     assert!(s.journal().is_empty());
 }
+
+#[test]
+fn undo_groups_make_one_step() {
+    let mut s = Session::new();
+    exec(&mut s, "node.create", json!({ "class": "Blur" }));
+    let rev = s.revision;
+    s.begin_group("Drag size");
+    for v in [1, 2, 3, 4] {
+        exec(&mut s, "node.setKnob", json!({ "node": "Blur1", "knob": "size", "value": v }));
+    }
+    assert!(s.revision > rev);
+    s.end_group();
+    assert_eq!(s.history(), ["Create Node", "Drag size"]);
+    exec(&mut s, "edit.undo", json!({}));
+    assert!(!s.script.by_name("Blur1").unwrap().knobs.contains_key("size"));
+    // An empty group adds nothing; undo inside a group closes it first.
+    s.begin_group("Nothing");
+    s.end_group();
+    assert_eq!(s.history(), ["Create Node"]);
+    s.begin_group("Move");
+    exec(&mut s, "node.move", json!({ "moves": [{ "node": "Blur1", "x": 5, "y": 6 }] }));
+    exec(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.script.by_name("Blur1").unwrap().x, 0.0);
+    assert!(!s.in_group());
+}

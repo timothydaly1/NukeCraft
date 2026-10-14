@@ -1,0 +1,23 @@
+[package]
+name = "nukecraft"
+description = "NukeCraft desktop app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "nukecraft"
+path = "src/main.rs"
+
+[dependencies]
+nukecraft-engine = { workspace = true }
+nukecraft-ui-egui = { workspace = true }
+eframe = { workspace = true, features = ["default_fonts", "glow", "x11", "wayland", "accesskit", "links"] }
+serde_json = { workspace = true }
+log = { workspace = true }

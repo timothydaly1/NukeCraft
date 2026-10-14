@@ -54,7 +54,13 @@ asset licensed and attributed (`cargo xtask assets`).
 - `cargo run -p nukecraft-cli -- exec node.create '{"class":"Blur","inputs":["Grade1"]}' demo.ncs --save`
   runs any engine command against a script.
 - `cargo run -p nukecraft-cli -- mcp --demo` serves MCP on stdio ([`.mcp.json`](.mcp.json) wires it up).
-- There is no desktop app yet (milestone M1).
+- `cargo run -p nukecraft -- --demo` opens the desktop app (eframe, OpenGL; on Linux it needs a
+  display and libxkbcommon-x11).
+- For UI work, **look at the result** headless — no window, no GPU:
+  `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step '{"method":"ui.click","params":{"id":"menu.Nodes"}}'`
+  (steps: `engine.execute`, `ui.click`, `ui.drag`, `ui.key`, `ui.text`, `ui.hover`, `ui.inspect`, `snap`;
+  element ids come from the automation registry). The rasteriser matches the real window (checked
+  under Xvfb).
 - Nuke reference: run your own synthetic scripts in a licensed Nuke (`nuke -t script.py` renders
   headless) and record **numbers** in `docs/fidelity/`; captures stay in `plan/nuke/ref/` (gitignored).
   See [`plan/nuke/README.md`](plan/nuke/README.md).

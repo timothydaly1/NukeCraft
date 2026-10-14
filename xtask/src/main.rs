@@ -24,7 +24,9 @@ const LAYERS: &[(&str, u8)] = &[
     ("io", 3),
     ("engine", 4),
     ("automation", 5),
+    ("ui-egui", 5),
     ("cli", 6),
+    ("nukecraft", 6),
 ];
 
 /// Allowed same-layer edges (from, to).
