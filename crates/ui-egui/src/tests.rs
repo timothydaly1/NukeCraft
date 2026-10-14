@@ -128,6 +128,10 @@ mod graph {
         assert_eq!(input_of(&h, "Grade2", 0).as_deref(), Some("Grade1"));
         assert_eq!(input_of(&h, "Blur2", 0).as_deref(), Some("Grade1"), "branched: Blur2 still reads Grade1");
         assert_eq!(h.app.session.history(), ["Create Blur", "Create Grade"]);
+        // K over the graph is Copy (over the Viewer it stops playback).
+        h.click("graph.node.Grade1", 1, Modifiers::NONE).unwrap();
+        h.key(Key::K, Modifiers::NONE);
+        assert_eq!(input_of(&h, "Copy1", 0).as_deref(), Some("Grade1"));
         // 1 views the selection.
         h.click("graph.node.Merge1", 1, Modifiers::NONE).unwrap();
         h.key(Key::Num1, Modifiers::NONE);

@@ -14,6 +14,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod blur;
+mod channel_nodes;
 mod color_math;
 mod color_nodes;
 pub mod filter;
@@ -193,6 +194,7 @@ impl Registry {
             .into_iter()
             .chain(color_nodes::specs())
             .chain(color_math::specs())
+            .chain(channel_nodes::specs())
             .chain(merge::specs())
             .chain(transform::specs())
             .chain(blur::specs())
@@ -348,6 +350,7 @@ mod tests {
         let n = image_nodes::specs().len()
             + color_nodes::specs().len()
             + color_math::specs().len()
+            + channel_nodes::specs().len()
             + merge::specs().len()
             + transform::specs().len()
             + blur::specs().len()

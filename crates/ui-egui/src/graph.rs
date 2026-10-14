@@ -5,8 +5,8 @@
 //! - Drag a node to move it (with the rest of the selection); drag from a node's bottom edge to
 //!   another node to connect; drag an input's arrow to reconnect it, or into empty space to
 //!   disconnect; drag on empty space to box-select; middle-drag or Alt-drag pans; scroll zooms.
-//! - With the pointer over the graph: Tab searches node classes, the node keys (B, G, M, T, ., R,
-//!   W) create nodes after the selection (Shift: in a new branch), 1 views the selected node, F
+//! - With the pointer over the graph: Tab searches node classes, the node keys (B, G, M, T, K, .,
+//!   R, W) create nodes after the selection (Shift: in a new branch), 1 views the selected node, F
 //!   frames the selection (or everything), Backspace deletes.
 //!
 //! Positions are graph units (the script's `x`, `y`, y down, a node's top-left corner).
@@ -35,6 +35,8 @@ pub struct GraphState {
     frame_request: bool,
     drag: Option<Drag>,
     search: Option<Search>,
+    /// Where the panel was last drawn: keys go to the panel under the pointer.
+    pub(crate) rect: Option<Rect>,
 }
 
 enum Drag {
@@ -148,6 +150,7 @@ pub fn show(app: &mut NukecraftApp, ui: &mut egui::Ui) {
     let rect = ui.max_rect();
     let resp = ui.allocate_rect(rect, Sense::click_and_drag());
     app.automation.add("graph.canvas", rect, "Node Graph");
+    app.graph.rect = Some(rect);
     let st = &mut app.graph;
     if st.zoom <= 0.0 {
         st.zoom = 1.0;

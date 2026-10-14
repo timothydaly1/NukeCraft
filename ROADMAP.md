@@ -13,10 +13,10 @@ the work list in [docs/gaps.md](docs/gaps.md), and the plan in [plan/execution-p
 
 | | Value | Kind |
 |---|---|---|
-| Node library breadth | ≈ 8% (22 classes) | Counted against [the node catalog](plan/nuke/node-catalog.md) |
-| Ready for real work | ≈ 4% | First desktop app; 22 nodes; no `.nk` |
-| Behaviours checked against Nuke | 0 of 15 listed | [docs/fidelity/README.md](docs/fidelity/README.md) |
-| Tests | 123 | `cargo test --workspace` (including headless UI tests) |
+| Node library breadth | ≈ 10% (26 classes) | Counted against [the node catalog](plan/nuke/node-catalog.md) |
+| Ready for real work | ≈ 5% | First desktop app; 26 nodes; no `.nk` |
+| Behaviours checked against Nuke | 0 of 16 listed | [docs/fidelity/README.md](docs/fidelity/README.md) |
+| Tests | 127 | `cargo test --workspace` (including headless UI tests) |
 | Agent control | every command | MCP and CLI |
 
 ## Milestones
@@ -25,7 +25,7 @@ the work list in [docs/gaps.md](docs/gaps.md), and the plan in [plan/execution-p
 |---|---|---|
 | M0 Foundation | Layered crates, image model, script format, 15 nodes, PNG/EXR, undo, CLI, MCP | done |
 | M1 Desktop app | Node Graph, Viewer, Properties, timeline, control channel, fidelity harness | done |
-| M2 Everyday nodes | Reformat, Shuffle, ColorCorrect, Roto, Keymix, CornerPin, Erode, Defocus, Group… | in progress: M2.1 colour nodes done |
+| M2 Everyday nodes | Reformat, Shuffle, ColorCorrect, Roto, Keymix, CornerPin, Erode, Defocus, Group… | in progress: M2.1 colour and M2.2 channel nodes done |
 | M3 Scripts | `.nk` import/export, expressions, linked knobs | |
 | M4 Performance | Tiles, threads, persistent cache, GPU, proxy | |
 | M5 Colour | OCIO, LUTs, viewer process | |

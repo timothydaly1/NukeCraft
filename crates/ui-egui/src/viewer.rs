@@ -481,9 +481,11 @@ fn timeline_ui(app: &mut NukecraftApp, ui: &mut egui::Ui, rect: Rect) {
 /// Advances the frame while playing, at the script's frame rate or as fast as frames render.
 fn playback(app: &mut NukecraftApp, ui: &egui::Ui) {
     let typing = ui.ctx().text_edit_focused();
+    // Keys go to the panel under the pointer: over the Node Graph, K is Copy, not stop.
+    let over_graph = ui.input(|i| i.pointer.hover_pos()).zip(app.graph.rect).is_some_and(|(p, r)| r.contains(p));
     let range = app.session.script.root.frames;
     let frame = app.session.time.floor_frame();
-    if !typing {
+    if !typing && !over_graph {
         let (l, k, left, right) = ui.input_mut(|i| {
             (
                 i.consume_key(Modifiers::NONE, Key::L),

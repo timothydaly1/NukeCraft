@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F15); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F16); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -66,6 +66,7 @@ pub fn cases() -> Vec<Case> {
     grade(&mut out);
     color_math(&mut out);
     masks(&mut out);
+    channels(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -370,6 +371,88 @@ fn masks(out: &mut Vec<Case>) {
         "Grade (add 0.1) with unpremult by a zero alpha",
         vec![constant("Z", [0.3, 0.2, 0.1, 0.0]), NodeDef::new("G", "Grade").input(0, "Z").knob("add", json!(0.1)).knob("unpremult", json!("rgba.alpha"))],
         vec![sample("G", vec![(5, 5)], &RGBA)],
+    ));
+}
+
+/// F16: Shuffle, Copy, ChannelMerge, Remove.
+fn channels(out: &mut Vec<Case>) {
+    let src = [0.1, 0.2, 0.3, 0.4];
+    for (id, knobs) in [
+        ("alpha_to_rgb", json!({ "red": "alpha", "green": "alpha", "blue": "alpha", "alpha": "alpha" })),
+        ("black_white", json!({ "red": "blue", "green": "black", "blue": "white", "alpha": "red" })),
+    ] {
+        out.push(case(
+            &format!("shuffle.{id}"),
+            "F16",
+            "A Constant (0.1, 0.2, 0.3, 0.4) through a (classic) Shuffle",
+            vec![constant("C", src), with_knobs(NodeDef::new("S", "Shuffle").input(0, "C"), knobs)],
+            vec![sample("S", vec![(5, 5)], &RGBA)],
+        ));
+    }
+    out.push(case(
+        "shuffle.to_depth",
+        "F16",
+        "Shuffle alpha into depth.Z",
+        vec![constant("C", src), NodeDef::new("S", "Shuffle").input(0, "C").knob("out", json!("depth")).knob("red", json!("alpha"))],
+        vec![sample("S", vec![(5, 5)], &["rgba.red", "rgba.alpha", "depth.Z"])],
+    ));
+    // B covers the format; A is a Constant cropped to (16, 16)-(48, 48) without a black border.
+    let ab = || {
+        vec![
+            constant("B", [0.5, 0.5, 0.5, 1.0]),
+            constant("Ac", [0.1, 0.2, 0.3, 0.25]),
+            NodeDef::new("A", "Crop").input(0, "Ac").knob("box", json!([16, 16, 48, 48])).knob("crop", json!(false)),
+        ]
+    };
+    for (id, knobs) in [
+        ("alpha", json!({ "bbox": "union" })),
+        ("b_side", json!({ "bbox": "B side" })),
+        ("to_depth", json!({ "from0": "rgba.red", "to0": "depth.Z", "bbox": "union" })),
+        ("layer", json!({ "from0": "none", "to0": "none", "channels": "rgb", "bbox": "union" })),
+        ("mix", json!({ "mix": 0.5, "bbox": "union" })),
+    ] {
+        let mut nodes = ab();
+        nodes.push(with_knobs(NodeDef::new("Cp", "Copy").input(0, "B").input(1, "A"), knobs));
+        out.push(case(
+            &format!("copy.{id}"),
+            "F16",
+            "Copy from A (cropped to 16..48) into B (the whole format)",
+            nodes,
+            vec![sample("Cp", vec![(5, 5), (30, 30), (60, 60)], &["rgba.red", "rgba.green", "rgba.alpha", "depth.Z"])],
+        ));
+    }
+    for op in ["union", "intersect", "stencil", "absminus", "plus", "minus", "from", "multiply", "max", "min", "in", "out"] {
+        out.push(case(
+            &format!("channelmerge.{op}"),
+            "F16",
+            "ChannelMerge of A alpha 0.25 and B alpha 0.6 into alpha",
+            vec![
+                constant("B", [0.0, 0.0, 0.0, 0.6]),
+                constant("A", [0.0, 0.0, 0.0, 0.25]),
+                NodeDef::new("CM", "ChannelMerge")
+                    .input(0, "B")
+                    .input(1, "A")
+                    .knob("operation", json!(op))
+                    .knob("A", json!("rgba.alpha"))
+                    .knob("B", json!("rgba.alpha"))
+                    .knob("output", json!("rgba.alpha")),
+            ],
+            vec![sample("CM", vec![(5, 5)], &["rgba.alpha"])],
+        ));
+    }
+    out.push(case(
+        "remove.keep",
+        "F16",
+        "Remove keeping only alpha",
+        vec![constant("C", src), NodeDef::new("R", "Remove").input(0, "C").knob("operation", json!("keep")).knob("channels", json!("alpha"))],
+        vec![sample("R", vec![(5, 5)], &RGBA)],
+    ));
+    out.push(case(
+        "remove.rgb",
+        "F16",
+        "Remove rgb",
+        vec![constant("C", src), NodeDef::new("R", "Remove").input(0, "C").knob("channels", json!("rgb"))],
+        vec![sample("R", vec![(5, 5)], &RGBA)],
     ));
 }
 

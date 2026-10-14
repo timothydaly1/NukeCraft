@@ -103,16 +103,18 @@ impl Channel {
         self.0.split_once('.').map_or(self.0.as_str(), |(l, _)| l)
     }
 
-    /// Sort key: rgba first (red, green, blue, alpha), then by layer and channel name.
+    /// Sort key: the rgba layer first, then by layer; within a layer red, green, blue and alpha
+    /// come first (in that order, as Nuke lists them), then the other channels by name.
     fn order(&self) -> (u8, &str, u8, &str) {
-        let rank = match self.0.as_str() {
-            "rgba.red" => 0,
-            "rgba.green" => 1,
-            "rgba.blue" => 2,
-            "rgba.alpha" => 3,
+        let (layer, chan) = self.0.split_once('.').unwrap_or((self.0.as_str(), ""));
+        let rank = match chan {
+            "red" => 0,
+            "green" => 1,
+            "blue" => 2,
+            "alpha" => 3,
             _ => 4,
         };
-        (if rank < 4 { 0 } else { 1 }, self.layer(), rank, &self.0)
+        (if layer == "rgba" { 0 } else { 1 }, layer, rank, &self.0)
     }
 }
 
@@ -147,11 +149,10 @@ impl ChannelSet {
                 "rgba" => set = set.union(&ChannelSet::rgba()),
                 "alpha" | "a" => set.insert(Channel::alpha()),
                 w if !w.contains('.') && !matches!(w, "r" | "g" | "b" | "red" | "green" | "blue" | "z" | "Z") => {
-                    // A layer name: every available channel of that layer.
+                    // A layer name: every available channel of that layer, else the channels of
+                    // one of Nuke's built-in layers.
                     let found: Vec<Channel> = available.iter().filter(|c| c.layer() == w).cloned().collect();
-                    if found.is_empty() {
-                        return Err(RasterError::BadChannel(w.into()));
-                    }
+                    let found = if found.is_empty() { builtin_layer(w).ok_or_else(|| RasterError::BadChannel(w.into()))? } else { found };
                     for c in found {
                         set.insert(c);
                     }
@@ -210,6 +211,20 @@ impl ChannelSet {
             self.0.iter().map(Channel::name).collect::<Vec<_>>().join(" ")
         }
     }
+}
+
+/// The channels of Nuke's built-in layers other than rgba, which exist even before any image has
+/// them: `depth`, `forward`, `backward`, `motion` (forward and backward) and `mask`.
+pub fn builtin_layer(name: &str) -> Option<Vec<Channel>> {
+    let names: &[&str] = match name {
+        "depth" => &["depth.Z"],
+        "forward" => &["forward.u", "forward.v"],
+        "backward" => &["backward.u", "backward.v"],
+        "motion" => &["forward.u", "forward.v", "backward.u", "backward.v"],
+        "mask" => &["mask.a"],
+        _ => return None,
+    };
+    Some(names.iter().map(|n| Channel(n.to_string())).collect())
 }
 
 impl FromIterator<Channel> for ChannelSet {
@@ -414,6 +429,12 @@ mod tests {
         assert_eq!(ChannelSet::parse("depth", &all).unwrap().len(), 1);
         assert_eq!(ChannelSet::parse("all", &all).unwrap(), all);
         assert!(ChannelSet::parse("nosuchlayer", &all).is_err());
+        let names: Vec<String> = ChannelSet::parse("motion", &ChannelSet::rgba()).unwrap().iter().map(|c| c.name().to_string()).collect();
+        assert_eq!(names, ["backward.u", "backward.v", "forward.u", "forward.v"], "a built-in layer the image lacks");
+        // Within any layer: red, green, blue, alpha, then the rest by name.
+        let matte: ChannelSet = ["matte.alpha", "matte.u", "matte.red", "matte.blue", "matte.green"].iter().map(|c| Channel::parse(c).unwrap()).collect();
+        let names: Vec<&str> = matte.iter().map(Channel::name).collect();
+        assert_eq!(names, ["matte.red", "matte.green", "matte.blue", "matte.alpha", "matte.u"]);
     }
 
     #[test]

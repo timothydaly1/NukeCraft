@@ -39,8 +39,12 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Shuffle (Shuffle2), ShuffleCopy, Copy | — | [M2] |
-| ChannelMerge, Remove, AddChannels | — | [M2] |
+| Shuffle | ◐ | Classic Shuffle (`in`, `out`, red/green/blue/alpha from a channel, black or white); no `in2`/`out2` |
+| Shuffle2, ShuffleCopy | — | Shuffle2's mapping knob with `.nk` import [M3] |
+| Copy | ✅ | Four channel pairs, layer copy, bbox, mask, mix |
+| ChannelMerge | ✅ | Twelve operations (F16) |
+| Remove | ✅ | Remove or keep up to four channel sets |
+| AddChannels | — | [M2] |
 
 ## Color
 
