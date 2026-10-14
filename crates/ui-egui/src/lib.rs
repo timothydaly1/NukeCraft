@@ -17,6 +17,8 @@ pub mod keys;
 mod menus;
 pub mod snapshot;
 pub mod theme;
+mod viewer;
+mod worker;
 
 use egui::KeyboardShortcut;
 use nukecraft_engine::{Session, command_specs};
@@ -42,6 +44,7 @@ pub struct NukecraftApp {
     /// Nodes whose properties are open, most recent first.
     pub(crate) open_props: Vec<NodeId>,
     pub(crate) graph: graph::GraphState,
+    pub(crate) viewer: viewer::ViewerState,
     pub(crate) dialogs: dialogs::Dialogs,
     status: Option<Status>,
     shortcuts: Vec<(KeyboardShortcut, &'static str)>,
@@ -97,6 +100,7 @@ impl NukecraftApp {
             viewed: None,
             open_props: Vec::new(),
             graph: graph::GraphState::default(),
+            viewer: viewer::ViewerState::new(ctx),
             dialogs: dialogs::Dialogs::default(),
             status: None,
             shortcuts,
@@ -109,9 +113,14 @@ impl NukecraftApp {
         app
     }
 
+    /// The Viewer's error for what it is showing, if rendering it failed.
+    pub fn viewer_error(&self) -> Option<String> {
+        self.viewer.current_error(self)
+    }
+
     /// Whether work is still in flight (renders), so a headless run should keep going.
     pub fn busy(&self) -> bool {
-        false
+        self.viewer.busy()
     }
 
     /// Draws one frame.
@@ -130,9 +139,7 @@ impl NukecraftApp {
             ui.allocate_space(ui.available_size());
         });
         egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).frame(egui::Frame::NONE).show(ui, |ui| graph::show(self, ui));
-        egui::CentralPanel::no_frame().show(ui, |ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, theme::VIEWER_BG);
-        });
+        egui::CentralPanel::no_frame().show(ui, |ui| viewer::show(self, ui));
 
         dialogs::show(self, &ctx);
         self.autosave();

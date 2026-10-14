@@ -157,7 +157,18 @@ static SPECS: &[CommandSpec] = &[
     edit("node.move", "Move Node", &[], None, "{node, x, y} | {moves: [{node, x, y}]} — positions in the node graph, one undo step", node_move),
     edit("node.label", "Set Label", &[], None, "{node, label}", node_label),
     // Time and rendering
-    action("time.goto", "Go to Frame", &[], None, "{frame}", time_goto),
+    // View state, not an edit: not journalled, so playback doesn't flood the journal.
+    CommandSpec {
+        id: "time.goto",
+        label: "Go to Frame",
+        menu: &[],
+        shortcut: None,
+        params: "{frame}",
+        enabled: always,
+        run: time_goto,
+        undoable: false,
+        journal: false,
+    },
     action(
         "render.execute",
         "Render…",

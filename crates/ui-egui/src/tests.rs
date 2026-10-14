@@ -160,3 +160,79 @@ mod graph {
         assert_eq!(h.app.open_props.first().copied(), h.app.session.script.id_of("Transform1").ok());
     }
 }
+
+mod viewer {
+    use super::*;
+    use egui::Key;
+    use serde_json::json;
+
+    /// The colour at the centre of the Viewer's image area.
+    fn viewer_center(h: &Headless) -> [u8; 4] {
+        let c = h.app.automation.center("viewer.image").expect("viewer");
+        h.snapshot().pixel(c.x as usize, c.y as usize).expect("pixel")
+    }
+
+    #[test]
+    fn shows_the_viewed_node_and_follows_edits() {
+        let mut h = demo();
+        h.app.session.execute("time.goto", &json!({ "frame": 12 })).unwrap();
+        h.settle(Duration::from_secs(20));
+        let before = viewer_center(&h);
+        // The centre of frame 12 is the orange/cream checkerboard, not the dark background.
+        assert!(before[0] > 150, "{before:?}");
+        // Turn the Grade down: the Viewer re-renders.
+        h.app.session.execute("node.setKnob", &json!({ "node": "Grade1", "knob": "white", "value": 0.2 })).unwrap();
+        h.settle(Duration::from_secs(20));
+        let after = viewer_center(&h);
+        assert!(after[0] < before[0] - 40, "{before:?} → {after:?}");
+    }
+
+    #[test]
+    fn channel_keys_switch_the_display() {
+        let mut h = demo();
+        h.app.session.execute("time.goto", &json!({ "frame": 12 })).unwrap();
+        h.settle(Duration::from_secs(20));
+        let c = h.app.automation.center("viewer.image").unwrap();
+        h.hover(c);
+        h.key(Key::A, Modifiers::NONE);
+        h.settle(Duration::from_secs(5));
+        let p = viewer_center(&h);
+        assert_eq!((p[0], p[1], p[2]), (255, 255, 255), "alpha is 1 everywhere: white");
+        h.key(Key::A, Modifiers::NONE);
+        h.frames(2);
+        assert_ne!(viewer_center(&h)[2], 255, "back to RGB");
+    }
+
+    #[test]
+    fn timeline_steps_and_plays() {
+        let mut h = demo();
+        h.click("viewer.next", 1, Modifiers::NONE).unwrap();
+        assert_eq!(h.app.session.time.floor_frame(), 2);
+        h.click("viewer.last", 1, Modifiers::NONE).unwrap();
+        assert_eq!(h.app.session.time.floor_frame(), 24);
+        h.click("viewer.play", 1, Modifiers::NONE).unwrap();
+        // Playing wraps from the last frame to the first and keeps going.
+        for _ in 0..200 {
+            h.settle(Duration::from_millis(200));
+            if (2..24).contains(&h.app.session.time.floor_frame()) {
+                break;
+            }
+        }
+        assert!((1..24).contains(&h.app.session.time.floor_frame()), "playing moved on from frame 24");
+        h.key(Key::K, Modifiers::NONE);
+        assert!(!h.app.viewer.playing);
+        // Time changes are not undo steps or journal entries.
+        assert!(h.app.session.history().is_empty());
+    }
+
+    #[test]
+    fn render_errors_are_shown_not_fatal() {
+        let mut h = Headless::new(Session::new(), Vec2::new(1024.0, 700.0), 1.0);
+        h.frames(2);
+        h.app.session.execute("node.create", &json!({ "class": "Read", "knobs": { "file": "/nonexistent/plate.####.exr" } })).unwrap();
+        h.app.viewed = h.app.session.script.id_of("Read1").ok();
+        h.settle(Duration::from_secs(10));
+        let err = h.app.viewer_error().expect("an error is shown");
+        assert!(err.contains("Read1"), "{err}");
+    }
+}
