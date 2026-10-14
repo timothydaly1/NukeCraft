@@ -9,19 +9,19 @@ with Nuke yet ([fidelity/README.md](fidelity/README.md)).
 
 | Area | ≈ % | Evidence |
 |---|---:|---|
-| Node library (toolbar breadth) | 18% | 46 classes, several partial (see the catalog) |
+| Node library (toolbar breadth) | 19% | 49 classes, several partial (see the catalog) |
 | Engine model (bbox/format, channels, ROI, edge repeat, linear premultiplied float) | 60% | In place and tested; missing tiles, threads, proxy, multiview, metadata, deep |
 | Animation | 25% | Keys, four interpolations, keying animated knobs; no Curve Editor, tangents, expressions, extrapolation modes |
 | Script files | 15% | Own `.ncs` format with repairs; no `.nk` |
 | Image formats | 15% | PNG (8/16) and EXR (half/float, data windows, layers on read) |
 | Colour management | 10% | sRGB, Rec. 709, gamma, Cineon; no OCIO |
-| User interface | 30% | Node Graph, Viewer, Properties, Curve Editor, menus, shortcuts, undo, autosave, background rendering, copy/paste, Backdrops and StickyNotes; on-viewer handles for Transform, CornerPin, Rectangle, Radial, Crop, Ramp; missing tangent editing, Dope Sheet, docking, Groups ([gaps.md](gaps.md) G1) |
+| User interface | 30% | Node Graph, Viewer, Properties, Curve Editor, menus, shortcuts, undo, autosave, background rendering, copy/paste, Groups, Backdrops and StickyNotes; on-viewer handles for Transform, CornerPin, Rectangle, Radial, Crop, Ramp; missing tangent editing, Dope Sheet, docking, Groups ([gaps.md](gaps.md) G1) |
 | Scripting and expressions | 0% | Milestone M3 |
 | Performance | unknown | Not measured; single-threaded |
 | Agent control (beyond Nuke) | ahead | Every command over MCP and CLI; `render_image`; the running app over a control channel and MCP bridge; the UI headless |
 
 **Ready for real work: ≈ 8%.** The app can build, animate, view and render simple comps from the
-46 nodes; real shots need the M2 node set, `.nk` exchange and measured fidelity.
+49 nodes; real shots need the M2 node set, `.nk` exchange and measured fidelity.
 
 ## How these numbers will be measured
 

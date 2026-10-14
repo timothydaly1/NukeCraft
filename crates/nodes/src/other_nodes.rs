@@ -34,8 +34,58 @@ const STICKY_KNOBS: &[KnobSpec] = &[
     knob("note_font_size", "font size", KnobKind::Int, KnobDefault::Number(22.0), "Size of the text."),
 ];
 
+const INPUT_KNOBS: &[KnobSpec] =
+    &[knob("number", "number", KnobKind::Int, KnobDefault::Number(0.0), "Which input of the enclosing Group this node brings in (0 is the first).")];
+
 pub fn specs() -> Vec<NodeSpec> {
     vec![
+        // The renderer reads through these three: a Group shows its Output, an Input shows the
+        // enclosing Group's input `number`. Their own functions only run outside that structure.
+        NodeSpec {
+            class: "Group",
+            aliases: &[],
+            label: "Group",
+            category: "Other",
+            shortcut: None,
+            help: "A node made of nodes: its Input nodes are its inputs, its Output node is its output.",
+            inputs: &[],
+            extra_inputs: true,
+            knobs: &[],
+            info: annotation_info,
+            request: crate::request_none,
+            engine: annotation_engine,
+            input_time: None,
+        },
+        NodeSpec {
+            class: "Input",
+            aliases: &[],
+            label: "Input",
+            category: "Other",
+            shortcut: None,
+            help: "Inside a Group: one of the Group's inputs.",
+            inputs: &[],
+            extra_inputs: false,
+            knobs: INPUT_KNOBS,
+            info: annotation_info,
+            request: crate::request_none,
+            engine: annotation_engine,
+            input_time: None,
+        },
+        NodeSpec {
+            class: "Output",
+            aliases: &[],
+            label: "Output",
+            category: "Other",
+            shortcut: None,
+            help: "Inside a Group: what the Group outputs.",
+            inputs: &[InputSpec { name: "", mask: false }],
+            extra_inputs: false,
+            knobs: &[],
+            info: info_passthrough,
+            request: request_same,
+            engine: engine_passthrough,
+            input_time: None,
+        },
         NodeSpec {
             class: "BackdropNode",
             aliases: &["Backdrop"],

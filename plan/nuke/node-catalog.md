@@ -133,5 +133,6 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 | Dot | ✅ | |
 | NoOp | ✅ | |
 | Backdrop (BackdropNode), StickyNote | ✅ | Node Graph items: a backdrop carries the nodes on it, resizes from its corner, wraps the selection when made |
-| Group, Input, Output, Precomp, LiveGroup | — | [M2]/[M10] |
+| Group, Input, Output | ◐ | Groups by parent links ([ADR 0004](../adr/0004-groups.md)): collapse, expand, enter; no exposed knobs yet [M3] |
+| Precomp, LiveGroup | — | [M10] |
 | BlinkScript-style kernels | — | [M10] (WGSL or WebAssembly) |

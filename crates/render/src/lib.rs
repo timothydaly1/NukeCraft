@@ -147,7 +147,27 @@ impl<'a> Renderer<'a> {
         Ok(times)
     }
 
+    /// The node a Group or an Input stands for: a Group shows its Output node, an Input the
+    /// enclosing Group's input `number` (`Some(None)`: nothing, black). `None` for other nodes.
+    fn stand_in(&self, node: &Node, t: FrameTime) -> Option<Option<NodeId>> {
+        match node.class.as_str() {
+            "Group" if !node.disabled => Some(self.script.children(Some(node.id)).find(|n| n.class == "Output" && !n.disabled).map(|o| o.id)),
+            "Input" => {
+                let number = node.knobs.get("number").map(|v| v.eval(t)).and_then(|v| v.as_numbers().and_then(|n| n.first().copied())).unwrap_or(0.0);
+                let number = if number.is_finite() { number.round().clamp(0.0, nukecraft_graph::MAX_INPUTS as f64) as usize } else { 0 };
+                Some(node.parent.and_then(|g| self.script.node(g)).and_then(|g| g.input(number)))
+            }
+            _ => None,
+        }
+    }
+
     fn info_uncached(&mut self, node: &'a Node, t: FrameTime) -> Result<ImageInfo> {
+        if let Some(src) = self.stand_in(node, t) {
+            return match src {
+                Some(id) => self.info(id, t),
+                None => Ok(ImageInfo::black(&self.script.root)),
+            };
+        }
         let spec = self.spec(node)?;
         let ids = Self::input_ids(node, spec);
         if node.disabled {
@@ -164,6 +184,12 @@ impl<'a> Renderer<'a> {
     }
 
     fn render_uncached(&mut self, node: &'a Node, info: &ImageInfo, t: FrameTime, region: IRect) -> Result<Image> {
+        if let Some(src) = self.stand_in(node, t) {
+            return match src {
+                Some(id) => self.render(id, t, region),
+                None => Ok(Image::new(IRect::EMPTY, info.channels.clone())?),
+            };
+        }
         let spec = self.spec(node)?;
         let ids = Self::input_ids(node, spec);
         if node.disabled {
@@ -387,6 +413,38 @@ mod tests {
         s.node_mut(off).unwrap().disabled = true;
         let mut r = Renderer::new(&s, &reg);
         assert_eq!(red(&mut r, off, 20), 20.0);
+    }
+
+    #[test]
+    fn groups_render_through_their_input_and_output() {
+        let mut s = Script::new();
+        s.root.format = Format::new(4, 4, 1.0);
+        let c = s.add_node("Constant", None).unwrap();
+        s.node_mut(c).unwrap().knobs.insert("color".into(), KnobValue::number(0.5));
+        let g = s.add_node("Group", None).unwrap();
+        s.connect(g, 0, c).unwrap();
+        let input = s.add_node_in(Some(g), "Input", None).unwrap();
+        let grade = s.add_node_in(Some(g), "Grade", None).unwrap();
+        s.node_mut(grade).unwrap().knobs.insert("white".into(), KnobValue::number(2.0));
+        s.connect(grade, 0, input).unwrap();
+        let out = s.add_node_in(Some(g), "Output", None).unwrap();
+        s.connect(out, 0, grade).unwrap();
+        let after = s.add_node("Grade", None).unwrap();
+        s.node_mut(after).unwrap().knobs.insert("white".into(), KnobValue::number(3.0));
+        s.connect(after, 0, g).unwrap();
+        let reg = Registry::builtin();
+        let red = |s: &Script, id| Renderer::new(s, &reg).render_format(id, FrameTime::ZERO).unwrap().1.get_at(0, 1, 1);
+        assert_eq!(red(&s, g), 1.0, "the group: 0.5 graded by 2 inside");
+        assert_eq!(red(&s, after), 3.0);
+        assert_eq!(red(&s, grade), 1.0, "a node inside renders on its own too");
+        // An Input for a second input the Group doesn't have is black; no Output is black.
+        s.node_mut(input).unwrap().knobs.insert("number".into(), KnobValue::number(1.0));
+        assert_eq!(red(&s, g), 0.0);
+        s.remove_node(out).unwrap();
+        assert_eq!(red(&s, g), 0.0);
+        // A disabled group passes its input 0 through.
+        s.node_mut(g).unwrap().disabled = true;
+        assert_eq!(red(&s, g), 0.5);
     }
 
     #[test]

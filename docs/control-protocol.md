@@ -19,7 +19,7 @@ window sees. `nukecraft-cli mcp --bridge PORT` puts an MCP server in front of it
 | Method | Params | Result |
 |---|---|---|
 | `engine.execute` | `{command, params}` | The command's result (any engine command; see `query.commands`) |
-| `app.state` | `{}` | `{viewed, selection, frame, revision, dirty, path, busy, viewerError, render}` (`render`: `{done, total, current}` while Render… runs in the background, else null) |
+| `app.state` | `{}` | `{viewed, selection, group, frame, revision, dirty, path, busy, viewerError, render}` (`group`: the Group the Node Graph shows, or null) (`render`: `{done, total, current}` while Render… runs in the background, else null) |
 | `app.view` | `{node}` | Views a node in the Viewer (what pressing 1 does) |
 | `ui.inspect` | `{prefix?}` | The on-screen elements whose automation id starts with `prefix`: `[{id, label, rect: [x, y, w, h]}]` |
 | `ui.click` | `{id, clicks?: 1‥3, modifiers?: ["shift", "alt", "cmd"]}` | Clicks the centre of an element (queued: it happens over the next frames) |
@@ -36,7 +36,8 @@ Every interactive element registers a stable id each frame. The main families:
 |---|---|
 | `menu.<Menu>`, `menu.<Menu>.<command id>`, `menu.Nodes.<Class>` | Menus and their items |
 | `graph.canvas` | The Node Graph |
-| `graph.node.<Name>`, `.output`, `.input.<i>` | A node, its output, the grab handle of input `i` (a Backdrop: its title bar, and `.resize`) |
+| `graph.node.<Name>`, `.output`, `.input.<i>` | A node, its output, the grab handle of input `i` (a Backdrop: its title bar, and `.resize`). Inside a group `<Name>` is a path: `graph.node.Group1.Blur1` |
+| `graph.crumb.root`, `graph.crumb.<GroupPath>` | The breadcrumb back up from inside a group |
 | `graph.search`, `graph.search.item.<Class>` | The Tab search field and its results |
 | `viewer.image`, `viewer.channel`, `viewer.exposure`, `viewer.gamma`, `viewer.fit` | The Viewer and its toolbar |
 | `viewer.handle.<Name>.<knob>` (box knobs: `.0`..`.3` corners from the bottom-left, `.move`) | On-viewer handles of nodes whose properties are open; drag them with `ui.drag` |
@@ -46,7 +47,7 @@ Every interactive element registers a stable id each frame. The main families:
 | `curves.curve.<Name>.<knob>.<component>`, `curves.key.<Name>.<knob>.<component>.<frame>` | A curve's name in the list (click: select its keys) and its keys |
 | `viewer.first`, `.prev`, `.play`, `.next`, `.last`, `.frame`, `.slider` | The timeline |
 | `props.<Name>.<knob>` (`.1`, `.2`… for further components), `.key`, `.browse` | Knob widgets and their key buttons |
-| `props.<Name>.name`, `.disable`, `.close`, `.render` | A node's panel header (and Write's Render button) |
+| `props.<Name>.name`, `.disable`, `.close`, `.label`, `.render`, `.open` | A node's panel header, label, Write's Render button, a Group's Open group button |
 | `dialog.unsaved.save` / `.dontsave` / `.cancel`, `dialog.settings.apply` | Dialogs |
 
 ## Headless

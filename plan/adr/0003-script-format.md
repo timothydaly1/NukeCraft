@@ -18,5 +18,6 @@ readable, versioned JSON (`.ecproj`, …) and treat the host app's format as imp
 ## Consequences
 
 - Scripts diff cleanly and are trivial for agents and tools to generate.
+- Schema history: 1 (M0); 2 (M2.12) adds each node's `parent` group ([ADR 0004](0004-groups.md)).
 - Studio pipelines that read or write `.nk` need the M3 converter; until then NukeCraft can't open
   existing Nuke work.

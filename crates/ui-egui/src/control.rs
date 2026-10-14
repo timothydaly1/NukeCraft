@@ -167,7 +167,8 @@ impl NukecraftApp {
                 self.session.execute(command, &params).map_err(|e| e.to_string())
             }
             "app.state" => Ok(json!({
-                "viewed": self.viewed.and_then(|v| self.session.script.name_of(v).ok()),
+                "viewed": self.viewed.and_then(|v| self.session.script.path_of(v).ok()),
+                "group": self.group_path(),
                 "selection": self.selected_names(),
                 "frame": self.session.time.as_f64(),
                 "revision": self.session.revision,

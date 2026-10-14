@@ -37,6 +37,8 @@ pub struct GraphState {
     search: Option<Search>,
     /// Where the panel was last drawn: keys go to the panel under the pointer.
     pub(crate) rect: Option<Rect>,
+    /// The Group whose nodes the panel shows (`None`: the top level).
+    pub(crate) group: Option<NodeId>,
 }
 
 enum Drag {
@@ -113,6 +115,20 @@ impl View {
     }
 }
 
+impl GraphState {
+    /// Frames the nodes again on the next draw (after changing group).
+    pub(crate) fn reframe(&mut self) {
+        self.framed = false;
+        self.drag = None;
+        self.search = None;
+    }
+}
+
+/// The nodes of the group the panel shows, in creation order.
+fn shown(app: &NukecraftApp) -> Vec<&Node> {
+    app.session.script.children(app.graph.group).collect()
+}
+
 /// Backdrops and sticky notes: Node Graph annotations without pipes.
 fn is_annotation(n: &Node) -> bool {
     matches!(n.class.as_str(), "BackdropNode" | "StickyNote")
@@ -183,13 +199,26 @@ fn input_anchor(rect: Rect, i: usize, mask: bool) -> (Pos2, Vec2) {
 
 /// How many input slots a node shows: its class's inputs, plus connected extras.
 fn shown_inputs(app: &NukecraftApp, n: &Node) -> usize {
+    if n.class == "Group" {
+        // One per Input node inside, by its number.
+        let inputs = app.session.script.children(Some(n.id)).filter(|c| c.class == "Input").map(|c| input_number(c) + 1).max().unwrap_or(0);
+        return inputs.max(n.inputs.len());
+    }
     let spec = app.session.registry.get(&n.class);
     let declared = spec.map_or(0, |s| s.inputs.len());
     let extra = spec.is_some_and(|s| s.extra_inputs);
     if extra { declared.max(n.inputs.len() + 1) } else { declared.max(n.inputs.len()) }
 }
 
+/// An Input node's `number`.
+fn input_number(n: &Node) -> usize {
+    knob_numbers(n, "number").first().copied().filter(|v| v.is_finite()).map_or(0, |v| v.round().clamp(0.0, 255.0) as usize)
+}
+
 fn input_label(app: &NukecraftApp, n: &Node, i: usize) -> String {
+    if n.class == "Group" {
+        return app.session.script.children(Some(n.id)).find(|c| c.class == "Input" && input_number(c) == i).map_or_else(|| i.to_string(), |c| c.name.clone());
+    }
     match app.session.registry.get(&n.class).and_then(|s| s.inputs.get(i)) {
         Some(spec) => spec.name.to_string(),
         None => i.to_string(),
@@ -269,14 +298,13 @@ fn draw_grid(painter: &egui::Painter, rect: Rect, view: View) {
 
 /// Fits the nodes (all, or the selection) into the panel.
 fn frame_nodes(app: &mut NukecraftApp, rect: Rect, only_selected: bool) {
+    let mut bounds = Rect::NOTHING;
+    for n in shown(app).into_iter().filter(|n| !only_selected || app.selection.contains(&n.id)) {
+        bounds = bounds.union(Rect::from_min_size(Pos2::new(n.x as f32, n.y as f32), node_size(n)));
+    }
     let st = &mut app.graph;
     st.framed = true;
     st.frame_request = false;
-    let nodes = app.session.script.nodes().iter().filter(|n| !only_selected || app.selection.contains(&n.id));
-    let mut bounds = Rect::NOTHING;
-    for n in nodes {
-        bounds = bounds.union(Rect::from_min_size(Pos2::new(n.x as f32, n.y as f32), node_size(n)));
-    }
     if !bounds.is_positive() || !bounds.is_finite() {
         st.zoom = 1.0;
         st.pan = Vec2::new(40.0, 40.0);
@@ -304,7 +332,7 @@ fn handle_zoom(app: &mut NukecraftApp, ui: &egui::Ui, resp: &egui::Response, rec
 }
 
 fn hit_test(app: &NukecraftApp, view: View, p: Pos2) -> Hit {
-    let nodes = app.session.script.nodes();
+    let nodes = shown(app);
     // Node bodies first (the topmost, last drawn, wins); the bottom strip is the output.
     for n in nodes.iter().rev().filter(|n| !is_backdrop(n)) {
         let r = view.node_rect(n);
@@ -413,7 +441,7 @@ fn moving(app: &NukecraftApp) -> Vec<(NodeId, f32, f32)> {
     let mut ids: Vec<NodeId> = app.selection.clone();
     for b in app.selection.iter().filter_map(|id| script.node(*id)).filter(|n| is_backdrop(n)) {
         let area = Rect::from_min_size(Pos2::new(b.x as f32, b.y as f32), node_size(b));
-        for n in script.nodes() {
+        for n in script.children(b.parent) {
             let r = Rect::from_min_size(Pos2::new(n.x as f32, n.y as f32), node_size(n));
             if n.id != b.id && area.contains_rect(r) && !ids.contains(&n.id) {
                 ids.push(n.id);
@@ -426,7 +454,7 @@ fn moving(app: &NukecraftApp) -> Vec<(NodeId, f32, f32)> {
 fn finish_drag(app: &mut NukecraftApp, view: View, drag: Drag, at: Option<Pos2>, modifiers: Modifiers) {
     match drag {
         Drag::Resize { id, start, delta, .. } => {
-            let Ok(name) = app.session.script.name_of(id).map(str::to_string) else { return };
+            let Ok(name) = app.session.script.path_of(id) else { return };
             let size = (start + delta).max(Vec2::new(60.0, 40.0));
             app.session.begin_group("Resize Backdrop");
             app.run("node.setKnob", json!({ "node": name, "knob": "bdwidth", "value": size.x.round() }));
@@ -440,7 +468,7 @@ fn finish_drag(app: &mut NukecraftApp, view: View, drag: Drag, at: Option<Pos2>,
             let moves: Vec<_> = start
                 .iter()
                 .filter_map(|(id, x, y)| {
-                    let name = app.session.script.name_of(*id).ok()?;
+                    let name = app.session.script.path_of(*id).ok()?;
                     Some(json!({ "node": name, "x": (x + delta.x).round(), "y": (y + delta.y).round() }))
                 })
                 .collect();
@@ -451,7 +479,7 @@ fn finish_drag(app: &mut NukecraftApp, view: View, drag: Drag, at: Option<Pos2>,
                 Some(Hit::Node(id) | Hit::Output(id)) => Some(id),
                 _ => None,
             };
-            let name = |id: NodeId| app.session.script.name_of(id).map(str::to_string).unwrap_or_default();
+            let name = |id: NodeId| app.session.script.path_of(id).unwrap_or_default();
             match (from, target) {
                 (PipeEnd::Output(src), Some(dst)) if src != dst => {
                     let input = free_input(app, dst);
@@ -469,11 +497,8 @@ fn finish_drag(app: &mut NukecraftApp, view: View, drag: Drag, at: Option<Pos2>,
         Drag::Box { start, end } => {
             let r = Rect::from_two_pos(start, end);
             // A backdrop is selected only when the box takes in all of it.
-            let inside: Vec<NodeId> = app
-                .session
-                .script
-                .nodes()
-                .iter()
+            let inside: Vec<NodeId> = shown(app)
+                .into_iter()
                 .filter(|n| if is_backdrop(n) { r.contains_rect(view.node_rect(n)) } else { r.intersects(view.node_rect(n)) })
                 .map(|n| n.id)
                 .collect();
@@ -507,6 +532,20 @@ fn handle_keys(app: &mut NukecraftApp, ui: &egui::Ui, view: View, hover: Option<
     let pointer = hover.unwrap_or_else(|| view.origin + Vec2::new(80.0, 80.0));
     if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Tab)) {
         app.graph.search = Some(Search { text: String::new(), at: pointer, graph_at: view.to_graph(pointer), index: 0, focus: true });
+        return;
+    }
+    // Cmd+Enter opens the selected Group; Cmd+Backspace goes back up.
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter)) {
+        if let Some(g) = app.selection.last().copied().filter(|g| app.session.script.node(*g).is_some_and(|n| n.class == "Group")) {
+            app.enter_group(Some(g));
+        }
+        return;
+    }
+    if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Backspace)) {
+        let up = app.graph.group.and_then(|g| app.session.script.node(g)).and_then(|n| n.parent);
+        if app.graph.group.is_some() {
+            app.enter_group(up);
+        }
         return;
     }
     if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Backspace)) && !app.selection.is_empty() {
@@ -664,7 +703,7 @@ fn pipe(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32, width: f3
 
 fn draw_pipes(app: &NukecraftApp, painter: &egui::Painter, view: View) {
     let script = &app.session.script;
-    for n in script.nodes() {
+    for n in shown(app) {
         let rect = view.node_rect(n);
         let slots = shown_inputs(app, n);
         for i in 0..slots {
@@ -717,7 +756,7 @@ fn drawn_rect(app: &NukecraftApp, view: View, n: &Node) -> Rect {
 }
 
 fn draw_backdrops(app: &NukecraftApp, painter: &egui::Painter, view: View) {
-    let mut backdrops: Vec<&Node> = app.session.script.nodes().iter().filter(|n| is_backdrop(n)).collect();
+    let mut backdrops: Vec<&Node> = shown(app).into_iter().filter(|n| is_backdrop(n)).collect();
     backdrops.sort_by_key(|n| knob_numbers(n, "z_order").first().map_or(0, |z| z.clamp(-1e6, 1e6) as i64));
     for n in backdrops {
         let rect = drawn_rect(app, view, n);
@@ -763,7 +802,7 @@ fn draw_sticky(app: &NukecraftApp, painter: &egui::Painter, view: View, n: &Node
 }
 
 fn draw_nodes(app: &NukecraftApp, painter: &egui::Painter, view: View) {
-    for n in app.session.script.nodes().iter().filter(|n| !is_backdrop(n)) {
+    for n in shown(app).into_iter().filter(|n| !is_backdrop(n)) {
         if n.class == "StickyNote" {
             draw_sticky(app, painter, view, n);
             continue;
@@ -828,29 +867,31 @@ fn draw_drag(app: &NukecraftApp, painter: &egui::Painter, view: View) {
 
 fn register_elements(app: &mut NukecraftApp, view: View) {
     let mut elements = Vec::new();
-    for n in app.session.script.nodes() {
+    for n in shown(app) {
         let rect = view.node_rect(n);
+        // Automation ids name nodes by path (`graph.node.Group1.Blur1`).
+        let path = app.path(n.id);
         if is_backdrop(n) {
-            elements.push((format!("graph.node.{}", n.name), Rect::from_min_size(rect.min, Vec2::new(rect.width(), TITLE_H * view.zoom)), n.name.clone()));
+            elements.push((format!("graph.node.{path}"), Rect::from_min_size(rect.min, Vec2::new(rect.width(), TITLE_H * view.zoom)), n.name.clone()));
             elements.push((
-                format!("graph.node.{}.resize", n.name),
+                format!("graph.node.{path}.resize"),
                 Rect::from_min_size(rect.right_bottom() - Vec2::splat(10.0), Vec2::splat(8.0)),
                 "resize".into(),
             ));
             continue;
         }
-        elements.push((format!("graph.node.{}", n.name), rect, n.name.clone()));
+        elements.push((format!("graph.node.{path}"), rect, n.name.clone()));
         if is_annotation(n) {
             continue;
         }
         elements.push((
-            format!("graph.node.{}.output", n.name),
+            format!("graph.node.{path}.output"),
             Rect::from_center_size(rect.center_bottom() - Vec2::new(0.0, 2.0), Vec2::splat(6.0)),
             "output".into(),
         ));
         for i in 0..shown_inputs(app, n) {
             let h = input_handle(view, app, n, i);
-            elements.push((format!("graph.node.{}.input.{i}", n.name), Rect::from_center_size(h, Vec2::splat(PICK)), input_label(app, n, i)));
+            elements.push((format!("graph.node.{path}.input.{i}"), Rect::from_center_size(h, Vec2::splat(PICK)), input_label(app, n, i)));
         }
     }
     for (id, rect, label) in elements {

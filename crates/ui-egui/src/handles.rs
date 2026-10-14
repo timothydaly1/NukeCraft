@@ -101,7 +101,8 @@ fn overlays(app: &NukecraftApp, map: Mapping) -> Vec<Overlay> {
         let Some(node) = app.session.script.node(id) else { continue };
         let Some(spec) = app.session.registry.get(&node.class) else { continue };
         let k = Knobs::evaluate(spec.knobs, &node.knobs, app.session.time, &app.session.script.root.format);
-        let h = |knob: &'static str, kind: Kind, p: V2| Handle { node: id, node_name: node.name.clone(), knob, kind, at: map.to_screen(p) };
+        let path = app.path(id);
+        let h = |knob: &'static str, kind: Kind, p: V2| Handle { node: id, node_name: path.clone(), knob, kind, at: map.to_screen(p) };
         let stroke = Stroke::new(1.5, theme::ACCENT);
         let mut o = Overlay { lines: Vec::new(), handles: Vec::new() };
         match spec.class {

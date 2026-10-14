@@ -104,10 +104,11 @@ fn downstream(script: &nukecraft_graph::Script, id: NodeId) -> Vec<NodeId> {
     out
 }
 
-/// The first position at or to the right of `(x, y)` where a node doesn't overlap another.
-fn free_spot(script: &nukecraft_graph::Script, mut x: f64, y: f64) -> (f64, f64) {
+/// The first position at or to the right of `(x, y)` where a node of `group` doesn't overlap
+/// another.
+fn free_spot(script: &nukecraft_graph::Script, group: Option<NodeId>, mut x: f64, y: f64) -> (f64, f64) {
     for _ in 0..100 {
-        let taken = script.nodes().iter().any(|n| (n.x - x).abs() < 100.0 && (n.y - y).abs() < 30.0);
+        let taken = script.children(group).any(|n| (n.x - x).abs() < 100.0 && (n.y - y).abs() < 30.0);
         if !taken {
             break;
         }
@@ -228,6 +229,38 @@ impl NukecraftApp {
             }
             self.automation.add(id, r.rect, label);
         }
+        // Inside a group: where the Node Graph is, each step clickable.
+        if self.bottom == BottomTab::NodeGraph && self.graph.group.is_some() {
+            child.separator();
+            let mut chain = Vec::new();
+            let mut cur = self.graph.group;
+            while let Some(g) = cur {
+                if chain.len() > nukecraft_graph::MAX_NESTING {
+                    break;
+                }
+                chain.push(g);
+                cur = self.session.script.node(g).and_then(|n| n.parent);
+            }
+            chain.reverse();
+            let mut go = None;
+            let r = child.link("Root");
+            self.automation.add("graph.crumb.root", r.rect, "Root");
+            if r.clicked() {
+                go = Some(None);
+            }
+            for g in chain {
+                child.label("/");
+                let name = self.session.script.name_of(g).unwrap_or("?").to_string();
+                let r = child.link(&name);
+                self.automation.add(format!("graph.crumb.{}", self.path(g)), r.rect, name);
+                if r.clicked() {
+                    go = Some(Some(g));
+                }
+            }
+            if let Some(g) = go {
+                self.enter_group(g);
+            }
+        }
         let body = egui::Rect::from_min_max(egui::pos2(full.left(), strip.bottom()), full.max);
         let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body));
         match self.bottom {
@@ -261,9 +294,27 @@ impl NukecraftApp {
         self.status = Some(Status { text: text.into(), error, since: self.now });
     }
 
-    /// Names of the selected nodes, as command parameters expect them.
+    /// A node's path (`Group1.Blur1`), as commands name nodes.
+    pub(crate) fn path(&self, id: NodeId) -> String {
+        self.session.script.path_of(id).unwrap_or_default()
+    }
+
+    /// Shows the nodes of `group` (`None`: the top level) in the Node Graph, framed.
+    pub(crate) fn enter_group(&mut self, group: Option<NodeId>) {
+        let was = self.graph.group;
+        self.graph.group = group;
+        self.selection = was.filter(|w| self.session.script.node(*w).is_some_and(|n| n.parent == group)).into_iter().collect();
+        self.graph.reframe();
+    }
+
+    /// The path of the group the Node Graph shows (`None`: the top level).
+    pub(crate) fn group_path(&self) -> Option<String> {
+        self.graph.group.and_then(|g| self.session.script.path_of(g).ok())
+    }
+
+    /// Paths of the selected nodes, as command parameters expect them.
     pub(crate) fn selected_names(&self) -> Vec<String> {
-        self.selection.iter().filter_map(|id| self.session.script.name_of(*id).ok().map(str::to_string)).collect()
+        self.selection.iter().filter_map(|id| self.session.script.path_of(*id).ok()).collect()
     }
 
     /// Runs a menu or shortcut command, supplying what it needs from the UI (the selection, a file
@@ -288,6 +339,31 @@ impl NukecraftApp {
             "file.save" | "file.saveAs" => {
                 if let Some(path) = dialogs::pick_save("script.ncs", &["ncs"]) {
                     self.run("file.save", json!({ "path": path }));
+                }
+            }
+            "node.group" => {
+                let nodes = self.selected_names();
+                if nodes.is_empty() {
+                    self.set_status("Select nodes to group", true);
+                    return;
+                }
+                if let Some(g) =
+                    self.run("node.group", json!({ "nodes": nodes })).and_then(|r| r["group"].as_str().and_then(|g| self.session.script.id_of(g).ok()))
+                {
+                    self.selection = vec![g];
+                }
+            }
+            "node.ungroup" => {
+                let groups: Vec<String> =
+                    self.selection.iter().filter(|id| self.session.script.node(**id).is_some_and(|n| n.class == "Group")).map(|id| self.path(*id)).collect();
+                let Some(g) = groups.first() else {
+                    self.set_status("Select a Group to expand", true);
+                    return;
+                };
+                if let Some(r) = self.run("node.ungroup", json!({ "node": g })) {
+                    let names: Vec<String> =
+                        r["nodes"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                    self.selection = names.iter().filter_map(|n| self.session.script.id_of(n).ok()).collect();
                 }
             }
             "node.delete" | "node.disable" => {
@@ -316,7 +392,7 @@ impl NukecraftApp {
             }
             "edit.paste" => self.paste(None),
             "render.frame" => {
-                let Some(node) = self.viewed.and_then(|v| self.session.script.name_of(v).ok()).map(str::to_string) else {
+                let Some(node) = self.viewed.and_then(|v| self.session.script.path_of(v).ok()) else {
                     self.set_status("View a node first (select it and press 1)", true);
                     return;
                 };
@@ -350,7 +426,7 @@ impl NukecraftApp {
         let (label, takes_input) = (spec.label, !spec.inputs.is_empty() || spec.extra_inputs);
         let upstream = self.selection.last().copied().filter(|_| takes_input);
         let script = &self.session.script;
-        let mut params = json!({ "class": class });
+        let mut params = json!({ "class": class, "group": self.group_path() });
         if let Some(up) = upstream.and_then(|u| script.node(u)) {
             params["inputs"] = json!([up.name]);
             params["x"] = json!(up.x);
@@ -370,11 +446,11 @@ impl NukecraftApp {
             if !branch && !consumers.is_empty() {
                 for id in downstream(script, up) {
                     if let Some(n) = script.node(id) {
-                        shift.push(json!({ "node": n.name, "x": n.x, "y": n.y + NODE_ROW }));
+                        shift.push(json!({ "node": self.path(n.id), "x": n.x, "y": n.y + NODE_ROW }));
                     }
                 }
             } else if let (Some(x), Some(y)) = (params["x"].as_f64(), params["y"].as_f64()) {
-                let (x, _) = free_spot(script, x, y);
+                let (x, _) = free_spot(script, self.graph.group, x, y);
                 params["x"] = json!(x);
             }
         }
@@ -384,9 +460,9 @@ impl NukecraftApp {
         }
         let created = self.run("node.create", params).and_then(|r| r["name"].as_str().and_then(|n| self.session.script.id_of(n).ok()));
         if let (Some(new), false) = (created, branch) {
-            let new_name = self.session.script.name_of(new).map(str::to_string).unwrap_or_default();
+            let new_name = self.path(new);
             for (c, i) in consumers {
-                let Ok(c_name) = self.session.script.name_of(c).map(str::to_string) else { continue };
+                let Ok(c_name) = self.session.script.path_of(c) else { continue };
                 self.run("node.connect", json!({ "node": c_name, "input": i, "from": new_name }));
             }
         }
@@ -410,7 +486,7 @@ impl NukecraftApp {
         }
         let (pad, title) = (20.0, 30.0);
         let knobs = json!({ "bdwidth": (x1 - x0 + 2.0 * pad).round(), "bdheight": (y1 - y0 + 2.0 * pad + title).round() });
-        let params = json!({ "class": "BackdropNode", "x": (x0 - pad).round(), "y": (y0 - pad - title).round(), "knobs": knobs });
+        let params = json!({ "class": "BackdropNode", "group": self.group_path(), "x": (x0 - pad).round(), "y": (y0 - pad - title).round(), "knobs": knobs });
         let created = self.run("node.create", params).and_then(|r| r["name"].as_str().and_then(|n| self.session.script.id_of(n).ok()));
         if let Some(id) = created {
             self.selection = vec![id];
@@ -457,6 +533,9 @@ impl NukecraftApp {
         self.open_props.retain(|id| script.node(*id).is_some());
         if self.viewed.is_some_and(|v| script.node(v).is_none()) {
             self.viewed = None;
+        }
+        if self.graph.group.is_some_and(|g| script.node(g).is_none()) {
+            self.graph.group = None;
         }
     }
 
@@ -505,7 +584,7 @@ impl NukecraftApp {
             self.set_status("Nothing to paste", true);
             return;
         }
-        if let Some(r) = self.run("edit.paste", json!({ "text": text })) {
+        if let Some(r) = self.run("edit.paste", json!({ "text": text, "group": self.group_path() })) {
             let names: Vec<&str> = r["names"].as_array().map(|a| a.iter().filter_map(serde_json::Value::as_str).collect()).unwrap_or_default();
             self.selection = names.iter().filter_map(|n| self.session.script.id_of(n).ok()).collect();
         }

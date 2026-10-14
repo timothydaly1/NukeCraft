@@ -19,7 +19,7 @@ Everything in L0–L4 builds for `wasm32-unknown-unknown` (`cargo xtask wasm`).
 | L0 | `color` | Transfer functions (sRGB, Rec. 709, Gamma 1.8/2.2, Cineon), Rec. 709 luminance, the 29 Merge operations |
 | L1 | `raster` | `Image`: any number of named channels (`rgba.red`, `depth.Z`, `layer.chan`) over a bbox, rows bottom-up, edge-repeat sampling, size and channel limits |
 | L1 | `curve` | Animation curves: keys on `FrameTime`, constant / linear / horizontal / Catmull-Rom segments, constant extrapolation |
-| L2 | `graph` | The script: `Root` settings, nodes (stable `NodeId`, unique name, class, knobs, inputs, DAG position), cycle-refusing connections, the `.ncs` file with a lenient, repairing loader |
+| L2 | `graph` | The script: `Root` settings, nodes (stable `NodeId`, name unique within its group, class, knobs, inputs, DAG position, `parent` group), paths (`Group1.Blur1`), cycle-refusing connections within a group, the `.ncs` file with a lenient, repairing loader |
 | L2 | `nodes` | The node registry (`NodeSpec`: class, inputs, knobs, `info`/`request`/`engine`/`input_time`), knob validation and evaluation, resampling filters, the built-in nodes |
 | L3 | `render` | Pull-based evaluation: info and region-of-interest propagation, per-render memoisation, cycle and depth limits, the render thread, display conversion |
 | L3 | `io` | PNG and OpenEXR in and out (pure Rust), frame-number patterns, the Read and Write nodes, `execute_write` |
@@ -94,7 +94,8 @@ the engine. Infos and images are memoised per `(node, t[, region])` within one r
 render once. Unconnected inputs read as black with the root format (mask inputs as "no mask");
 disabled nodes pass input 0 through. Walks are cycle-checked and limited to `MAX_DEPTH` (512) nodes;
 callers render on `with_render_stack` (a 64 MB thread), which also turns an escaped panic into an
-error.
+error. Groups are read through ([ADR 0004](../plan/adr/0004-groups.md)): a Group stands for its Output
+node, an Input node for its Group's input `number`.
 
 Not yet: tiles and threads, a cache that survives edits, GPU, proxy mode, motion blur, multiview
 ([gaps.md](gaps.md)).
@@ -133,6 +134,10 @@ animated knob components of the nodes whose properties are open and edits them t
 `node.editKeys` (one component's curve: remove and set keys in one atomic command) and
 `node.setInterpolation`; a key drag is one undo group. Bare-key shortcuts go to the panel under the
 pointer (Delete over the Curve Editor deletes keys, not nodes).
+
+The Node Graph shows one group at a time (`GraphState::group`): Cmd+Enter or a Group's **Open
+group** button goes in, Cmd+Backspace or the breadcrumb beside the tabs goes back up. Commands
+and automation ids name nodes by path, so everything works the same inside a group.
 
 Copy, cut and paste go through `edit.copy`, `edit.cut` and `edit.paste`: a fragment is JSON with
 inputs by name, so pasting keeps the pipes inside it and reconnects to outside nodes of the same

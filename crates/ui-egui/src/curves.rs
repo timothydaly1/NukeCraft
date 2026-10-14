@@ -122,7 +122,7 @@ fn shown_curves(app: &NukecraftApp) -> Vec<Shown> {
                 let suffix = if single { String::new() } else { format!(".{}", component_name(ks.kind, comp)) };
                 out.push(Shown {
                     curve: CurveRef { node: id, knob: ks.name, comp },
-                    label: format!("{}.{}{suffix}", node.name, ks.name),
+                    label: format!("{}.{}{suffix}", app.path(id), ks.name),
                     color: component_color(ks.kind, comp),
                     keys: curve.keys().to_vec(),
                     anim: (*anim).clone(),
@@ -188,8 +188,7 @@ fn fit_view(app: &NukecraftApp, curves: &[Shown]) -> [f64; 4] {
 
 /// Builds the curve label's automation id part: `<node>.<knob>.<comp>`.
 fn curve_id(app: &NukecraftApp, c: &CurveRef) -> String {
-    let name = app.session.script.name_of(c.node).unwrap_or("?");
-    format!("{name}.{}.{}", c.knob, c.comp)
+    format!("{}.{}.{}", app.path(c.node), c.knob, c.comp)
 }
 
 pub fn show(app: &mut NukecraftApp, ui: &mut egui::Ui) {
@@ -298,7 +297,7 @@ fn set_interpolation(app: &mut NukecraftApp, _interp: Interp, name: &str) {
     let groups = by_curve(&app.curves.selected);
     app.session.begin_group("Set Interpolation");
     for (c, frames) in groups {
-        let Ok(node) = app.session.script.name_of(c.node).map(str::to_string) else { continue };
+        let Ok(node) = app.session.script.path_of(c.node) else { continue };
         let frames: Vec<f64> = frames.iter().map(|t| t.as_f64()).collect();
         app.run("node.setInterpolation", json!({ "node": node, "knob": c.knob, "component": c.comp, "frames": frames, "interp": name }));
     }
@@ -309,7 +308,7 @@ fn delete_selected(app: &mut NukecraftApp) {
     let groups = by_curve(&app.curves.selected);
     app.session.begin_group("Delete Keys");
     for (c, frames) in groups {
-        let Ok(node) = app.session.script.name_of(c.node).map(str::to_string) else { continue };
+        let Ok(node) = app.session.script.path_of(c.node) else { continue };
         let frames: Vec<f64> = frames.iter().map(|t| t.as_f64()).collect();
         app.run("node.editKeys", json!({ "node": node, "knob": c.knob, "component": c.comp, "remove": frames }));
     }
@@ -473,7 +472,7 @@ fn move_keys(app: &mut NukecraftApp, offset: (i64, f64)) {
         }
     }
     for c in &curves {
-        let Ok(node) = app.session.script.name_of(c.node).map(str::to_string) else { continue };
+        let Ok(node) = app.session.script.path_of(c.node) else { continue };
         let mine: Vec<&(KeyRef, f64, Interp)> = keys.iter().filter(|(k, ..)| k.curve == *c).collect();
         let remove: Vec<f64> = mine.iter().map(|(k, ..)| shift(k.time, prev.0).as_f64()).collect();
         let new_times: Vec<FrameTime> = mine.iter().map(|(k, ..)| shift(k.time, offset.0)).collect();

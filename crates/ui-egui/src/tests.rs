@@ -571,6 +571,49 @@ mod annotations {
     }
 }
 
+mod groups {
+    use super::*;
+    use egui::Key;
+
+    #[test]
+    fn collapse_enter_edit_and_leave_a_group() {
+        let mut h = demo();
+        h.click("graph.node.Grade1", 1, Modifiers::NONE).unwrap();
+        h.click("graph.node.Blur1", 1, Modifiers::SHIFT).unwrap();
+        h.hover(h.app.automation.center("graph.canvas").unwrap());
+        h.key(Key::G, Modifiers::COMMAND);
+        assert!(h.app.session.script.by_name("Group1.Grade1").is_some(), "Cmd+G collapsed the selection");
+        assert_eq!(h.app.selected_names(), ["Group1"]);
+        h.frames(2);
+        assert!(h.app.automation.find("graph.node.Group1").is_some());
+        assert!(h.app.automation.find("graph.node.Grade1").is_none(), "the top level no longer shows it");
+        // Enter: the group's nodes, with paths for ids.
+        h.key(Key::Enter, Modifiers::COMMAND);
+        h.frames(2);
+        for id in ["graph.node.Group1.Grade1", "graph.node.Group1.Blur1", "graph.node.Group1.Input1", "graph.node.Group1.Output1", "graph.crumb.root"] {
+            assert!(h.app.automation.find(id).is_some(), "{id}");
+        }
+        // Make a node in here: it goes inside, after the selection.
+        h.click("graph.node.Group1.Blur1", 1, Modifiers::NONE).unwrap();
+        h.app.create_node("Saturation", false);
+        let sat = h.app.session.script.by_name("Group1.Saturation1").expect("created inside");
+        let up = sat.input(0).and_then(|i| h.app.session.script.path_of(i).ok());
+        assert_eq!(up.as_deref(), Some("Group1.Blur1"));
+        // Its knobs, by path.
+        h.click("graph.node.Group1.Saturation1", 2, Modifiers::NONE).unwrap();
+        assert!(h.app.automation.find("props.Group1.Saturation1.saturation").is_some());
+        // Back up by the breadcrumb.
+        h.click("graph.crumb.root", 1, Modifiers::NONE).unwrap();
+        h.frames(2);
+        assert!(h.app.automation.find("graph.node.Group1").is_some() && h.app.automation.find("graph.node.Group1.Blur1").is_none());
+        assert_eq!(h.app.selected_names(), ["Group1"], "the group we came from is selected");
+        // Expand it again.
+        h.key(Key::G, Modifiers::COMMAND | Modifiers::ALT);
+        assert!(h.app.session.script.by_name("Saturation1").is_some(), "expanded to the top level");
+        assert!(h.app.session.script.by_name("Group1").is_none());
+    }
+}
+
 mod control {
     use super::*;
     use serde_json::{Value, json};

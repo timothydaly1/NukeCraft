@@ -6,9 +6,9 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** the rest of M2: Group with Input and Output (M2.12), then Roto (M2.13); the other G1 follow-ups in
+- **Next task:** M2.13 Roto (Bezier shapes with feather, animated, drawn and edited on the Viewer); the other G1 follow-ups in
   `docs/gaps.md`. When the oracle arrives, fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (164 tests, including headless UI and fidelity tests).
+- **Gate:** `cargo xtask ci` green (169 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -17,6 +17,10 @@
 
 ## Recently done
 
+- M2.12: Groups ([ADR 0004](adr/0004-groups.md)): nodes have a parent group, names are unique per
+  group, commands name nested nodes by path (`Group1.Blur1`); Group, Input and Output classes the
+  renderer reads through; `node.group` (Cmd+G) and `node.ungroup` (Cmd+Alt+G); entering groups in
+  the Node Graph with a breadcrumb; copy/paste carry group contents; script schema 2.
 - M2.11: CheckerBoard's four colours, lines and centre lines (Nuke's defaults); ColorBars; 5 more
   fidelity cases (F9).
 - M2.10: Backdrop (BackdropNode) and StickyNote in the Node Graph (a backdrop carries its nodes,

@@ -14,6 +14,7 @@
 mod commands;
 pub mod demo;
 pub mod fragment;
+mod groups;
 mod params;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};

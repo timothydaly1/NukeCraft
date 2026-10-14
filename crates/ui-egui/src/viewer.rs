@@ -236,7 +236,7 @@ fn toolbar_ui(app: &mut NukecraftApp, ui: &mut egui::Ui, rect: Rect) {
     }
     elements.push(("viewer.oneToOne", r.rect, "1:1"));
     ui.colored_label(theme::TEXT_DIM, format!("{:.0}%", v.zoom * 100.0));
-    let viewed = app.viewed.and_then(|id| app.session.script.name_of(id).ok()).unwrap_or("—").to_string();
+    let viewed = app.viewed.and_then(|id| app.session.script.path_of(id).ok()).unwrap_or_else(|| "—".to_string());
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if let Some((_, f)) = &app.viewer.shown {
             let b = f.info.bbox;

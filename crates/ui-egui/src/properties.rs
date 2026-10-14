@@ -34,6 +34,7 @@ enum Action {
     Key { node: String, knob: &'static str, op: KeyOp },
     Browse { node: String, knob: &'static str, save: bool },
     Render(String),
+    OpenGroup(NodeId),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -81,6 +82,8 @@ pub fn show(app: &mut NukecraftApp, ui: &mut egui::Ui) {
 
 fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &mut Vec<Action>) {
     let Some(node) = app.session.script.node(id).cloned() else { return };
+    // Commands and automation ids name nodes by path (`Group1.Blur1`).
+    let path = app.path(id);
     let Some(spec) = app.session.registry.get(&node.class) else {
         ui.colored_label(theme::ERROR, format!("{}: unknown class {}", node.name, node.class));
         return;
@@ -96,11 +99,11 @@ fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &m
             let key = format!("name:{}", id.0);
             let buf = app.props.buffers.entry(key.clone()).or_insert_with(|| node.name.clone());
             let r = ui.add(egui::TextEdit::singleline(buf).desired_width(130.0).font(egui::TextStyle::Monospace));
-            elements.push((format!("props.{}.name", node.name), r.rect, "name".into()));
+            elements.push((format!("props.{path}.name"), r.rect, "name".into()));
             if r.lost_focus() {
                 let new = app.props.buffers.remove(&key).unwrap_or_default();
                 if new != node.name && !new.is_empty() {
-                    actions.push(Action::Rename { node: node.name.clone(), name: new });
+                    actions.push(Action::Rename { node: path.clone(), name: new });
                 }
             } else if !r.has_focus() {
                 app.props.buffers.insert(key, node.name.clone());
@@ -108,15 +111,15 @@ fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &m
             ui.colored_label(theme::TEXT_DIM, label);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let r = ui.small_button("×").on_hover_text("Close");
-                elements.push((format!("props.{}.close", node.name), r.rect, "close".into()));
+                elements.push((format!("props.{path}.close"), r.rect, "close".into()));
                 if r.clicked() {
                     actions.push(Action::Close(id));
                 }
                 let mut disabled = node.disabled;
                 let r = ui.checkbox(&mut disabled, "disable");
-                elements.push((format!("props.{}.disable", node.name), r.rect, "disable".into()));
+                elements.push((format!("props.{path}.disable"), r.rect, "disable".into()));
                 if r.changed() {
-                    actions.push(Action::Disable { node: node.name.clone(), disabled });
+                    actions.push(Action::Disable { node: path.clone(), disabled });
                 }
             });
         });
@@ -127,7 +130,7 @@ fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &m
         egui::Grid::new(("knobs", id.0)).num_columns(3).spacing([8.0, 4.0]).min_col_width(20.0).show(ui, |ui| {
             for k in knobs {
                 let view = knob_view(app, &node, k);
-                knob_row(app, ui, &node.name, id, k, &view, actions, &mut elements);
+                knob_row(app, ui, &path, id, k, &view, actions, &mut elements);
                 ui.end_row();
             }
         });
@@ -138,22 +141,30 @@ fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &m
             let key = format!("label:{}", id.0);
             let buf = app.props.buffers.entry(key.clone()).or_insert_with(|| node.label.clone());
             let r = ui.add(egui::TextEdit::multiline(buf).desired_rows(1).desired_width(f32::INFINITY));
-            elements.push((format!("props.{}.label", node.name), r.rect, "label".into()));
+            elements.push((format!("props.{path}.label"), r.rect, "label".into()));
             if r.lost_focus() {
                 let new = app.props.buffers.remove(&key).unwrap_or_default();
                 if new != node.label {
-                    actions.push(Action::Label { node: node.name.clone(), label: new });
+                    actions.push(Action::Label { node: path.clone(), label: new });
                 }
             } else if !r.has_focus() {
                 app.props.buffers.insert(key, node.label.clone());
             }
         });
+        if class == "Group" {
+            ui.add_space(4.0);
+            let r = ui.button("Open group").on_hover_text("Show the group's nodes in the Node Graph (Cmd+Enter)");
+            elements.push((format!("props.{path}.open"), r.rect, "Open group".into()));
+            if r.clicked() {
+                actions.push(Action::OpenGroup(id));
+            }
+        }
         if class == "Write" {
             ui.add_space(4.0);
             let r = ui.button("Render").on_hover_text("Render this Write node over the frame range");
-            elements.push((format!("props.{}.render", node.name), r.rect, "Render".into()));
+            elements.push((format!("props.{path}.render"), r.rect, "Render".into()));
             if r.clicked() {
-                actions.push(Action::Render(node.name.clone()));
+                actions.push(Action::Render(path.clone()));
             }
         }
     });
@@ -440,6 +451,10 @@ fn apply(app: &mut NukecraftApp, actions: Vec<Action>) {
                 }
             }
             Action::Render(node) => app.start_render(json!({ "nodes": [node] })),
+            Action::OpenGroup(id) => {
+                app.bottom = crate::BottomTab::NodeGraph;
+                app.enter_group(Some(id));
+            }
         }
     }
 }

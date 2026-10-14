@@ -302,3 +302,56 @@ fn copy_and_paste_nodes() {
     let b = empty.script.by_name("B").unwrap();
     assert_eq!(b.knobs.len(), 1, "{:?}", b.knobs);
 }
+
+/// Red at a pixel of a node at frame 12.
+fn red_at(s: &crate::Session, node: &str, x: i32, y: i32) -> f32 {
+    let id = s.script.id_of(node).unwrap();
+    let (script, reg) = (&s.script, &s.registry);
+    let img = nukecraft_render::with_render_stack(|| nukecraft_render::Renderer::new(script, reg).render_format(id, nukecraft_time::FrameTime::from_frame(12)))
+        .unwrap()
+        .unwrap()
+        .1;
+    img.get_at(0, x, y)
+}
+
+#[test]
+fn grouping_keeps_the_picture() {
+    let mut s = demo_session().unwrap();
+    let before: Vec<f32> = [(100, 100), (320, 180), (500, 300)].iter().map(|(x, y)| red_at(&s, "Write1", *x, *y)).collect();
+    let r = exec(&mut s, "node.group", json!({ "nodes": ["Grade1", "Blur1"] }));
+    assert_eq!(r["group"], "Group1");
+    assert!(s.script.by_name("Group1.Grade1").is_some() && s.script.by_name("Group1.Input1").is_some() && s.script.by_name("Group1.Output1").is_some());
+    assert!(s.script.by_name("Grade1").is_none(), "moved inside");
+    let input = |s: &crate::Session, n: &str| s.script.by_name(n).and_then(|n| n.input(0)).and_then(|i| s.script.path_of(i).ok());
+    assert_eq!(input(&s, "Write1").as_deref(), Some("Group1"));
+    assert_eq!(input(&s, "Group1").as_deref(), Some("Merge2"));
+    assert_eq!(input(&s, "Group1.Grade1").as_deref(), Some("Group1.Input1"));
+    assert_eq!(input(&s, "Group1.Blur1").as_deref(), Some("Group1.Grade1"), "the pipe between grouped nodes survives");
+    let grouped: Vec<f32> = [(100, 100), (320, 180), (500, 300)].iter().map(|(x, y)| red_at(&s, "Write1", *x, *y)).collect();
+    assert_eq!(grouped, before, "the picture is the same through the group");
+    // Knobs of nested nodes by path; nodes made inside by `group`.
+    exec(&mut s, "node.setKnob", json!({ "node": "Group1.Grade1", "knob": "white", "value": 1.5 }));
+    exec(&mut s, "node.create", json!({ "class": "Saturation", "group": "Group1", "inputs": ["Blur1"] }));
+    assert_eq!(input(&s, "Group1.Saturation1").as_deref(), Some("Group1.Blur1"));
+    assert!(s.execute("node.connect", &json!({ "node": "Group1.Saturation1", "input": 0, "from": "Merge2" })).is_err(), "pipes stay in their group");
+    let nodes = exec(&mut s, "query.nodes", json!({}));
+    assert!(nodes.as_array().unwrap().iter().any(|n| n["name"] == "Group1.Grade1" && n["group"] == "Group1"));
+    // Copy the whole group and paste it: its contents come along.
+    let text = exec(&mut s, "edit.copy", json!({ "nodes": ["Group1"] }))["text"].as_str().unwrap().to_string();
+    let r = exec(&mut s, "edit.paste", json!({ "text": text }));
+    assert_eq!(r["names"], json!(["Group2"]));
+    assert_eq!(input(&s, "Group2.Blur1").as_deref(), Some("Group2.Grade1"));
+    assert_eq!(input(&s, "Group2").as_deref(), Some("Merge2"), "outside input by name");
+    // Expanding puts things back.
+    exec(&mut s, "edit.undo", json!({}));
+    exec(&mut s, "edit.undo", json!({}));
+    exec(&mut s, "edit.undo", json!({}));
+    let r = exec(&mut s, "node.ungroup", json!({ "node": "Group1" }));
+    assert_eq!(r["nodes"], json!(["Grade1", "Blur1"]));
+    assert_eq!(input(&s, "Write1").as_deref(), Some("Blur1"));
+    assert_eq!(input(&s, "Grade1").as_deref(), Some("Merge2"));
+    let after: Vec<f32> = [(100, 100), (320, 180), (500, 300)].iter().map(|(x, y)| red_at(&s, "Write1", *x, *y)).collect();
+    assert_eq!(after, before);
+    assert!(s.execute("node.ungroup", &json!({ "node": "Grade1" })).is_err(), "not a group");
+    assert!(s.execute("node.create", &json!({ "class": "Blur", "group": "Grade1" })).is_err(), "not a group");
+}

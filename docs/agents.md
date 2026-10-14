@@ -27,6 +27,10 @@ Node Graph and Viewer at once, and `render_image` renders what the app has.
 A typical loop: `node_classes` once, then `execute` `node.create` / `node.connect` / `node.setKnob`,
 `render_image` to look, `execute` `edit.undo` when something is wrong, `file.save` at the end.
 
+Nodes inside Groups are named by path: `Group1.Blur1` (top-level names are plain). `node.create`
+takes `group` to make a node inside one (its `inputs` then name siblings); `node.group` and
+`node.ungroup` collapse and expand; `query.nodes` lists every node's path and group.
+
 ## Command line
 
 ```sh

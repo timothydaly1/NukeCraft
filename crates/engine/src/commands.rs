@@ -121,7 +121,7 @@ static SPECS: &[CommandSpec] = &[
         "Paste",
         &["Edit"],
         Some("Cmd+V"),
-        "{text: fragment from edit.copy, x?, y?} — renames taken names, keeps pipes (to outside nodes by name); returns {names}",
+        "{text: fragment from edit.copy, group?: Group path, x?, y?} — renames taken names, keeps pipes (to outside nodes by name); returns {names}",
         crate::fragment::edit_paste,
     ),
     edit(
@@ -154,10 +154,26 @@ static SPECS: &[CommandSpec] = &[
         "Create Node",
         &[],
         None,
-        "{class, name?, knobs?: {knob: value}, inputs?: [name|null], x?, y?} — class names or menu names (Merge → Merge2); returns {name, class}",
+        "{class, name?, group?: Group path, knobs?: {knob: value}, inputs?: [name|null], x?, y?} — class names or menu names (Merge → Merge2); inside a group, inputs name siblings; returns {name: path, class}",
         node_create,
     ),
     edit("node.rename", "Rename", &[], None, "{node, name}", node_rename),
+    edit(
+        "node.group",
+        "Collapse to Group",
+        &["Edit"],
+        Some("Cmd+G"),
+        "{nodes} — moves the nodes into a new Group, with an Input per outside source and an Output; returns {group}",
+        crate::groups::node_group,
+    ),
+    edit(
+        "node.ungroup",
+        "Expand Group",
+        &["Edit"],
+        Some("Cmd+Alt+G"),
+        "{node: a Group} — moves its nodes out and deletes it, keeping the pipes",
+        crate::groups::node_ungroup,
+    ),
     edit("node.connect", "Connect", &[], None, "{node, input: index, from: name} — refuses cycles", node_connect),
     edit("node.disconnect", "Disconnect", &[], None, "{node, input: index}", node_disconnect),
     edit(
@@ -391,11 +407,12 @@ fn node_spec(s: &Session, id: NodeId) -> Result<&NodeSpec> {
 fn node_create(s: &mut Session, p: &Value) -> Result<Value> {
     let spec = class_spec(s, params::str(p, "class")?)?;
     let (class, label, knob_specs, max_inputs) = (spec.class, spec.label, spec.knobs, spec.max_inputs());
+    let parent = crate::groups::group_param(s, p)?;
     let name = match params::opt_str(p, "name")? {
         Some(n) => n.to_string(),
-        None => s.script.unique_name(label),
+        None => s.script.unique_name_in(parent, label),
     };
-    let id = s.script.add_node(class, Some(&name))?;
+    let id = s.script.add_node_in(parent, class, Some(&name))?;
     // Format- and time-dependent defaults are fixed when the node is made, as Nuke does.
     let format = s.script.root.format.clone();
     let frame = s.time.floor_frame() as f64;
@@ -424,7 +441,11 @@ fn node_create(s: &mut Session, p: &Value) -> Result<Value> {
             match v {
                 Value::Null => {}
                 Value::String(from) => {
-                    let from = s.script.id_of(from)?;
+                    // A sibling by name, else a path from the top.
+                    let from = match s.script.child_by_name(parent, from) {
+                        Some(n) => n.id,
+                        None => s.script.id_of(from)?,
+                    };
                     s.script.connect(id, i, from)?;
                 }
                 _ => return Err(bad("`inputs` must be a list of node names (or null)")),
@@ -438,7 +459,7 @@ fn node_create(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(n) = s.script.node_mut(id) {
         (n.x, n.y) = (x, y);
     }
-    Ok(json!({ "name": name, "class": class }))
+    Ok(json!({ "name": s.script.path_of(id)?, "class": class }))
 }
 
 /// Below input 0 if connected, else to the right of everything.
@@ -784,7 +805,11 @@ fn q_nodes(s: &mut Session, _: &Value) -> Result<Value> {
         .script
         .nodes()
         .iter()
-        .map(|n| json!({ "name": n.name, "class": n.class, "inputs": input_names(s, n.id), "disabled": n.disabled, "x": n.x, "y": n.y }))
+        .map(|n| {
+            let path = s.script.path_of(n.id).unwrap_or_else(|_| n.name.clone());
+            let group = n.parent.and_then(|g| s.script.path_of(g).ok());
+            json!({ "name": path, "class": n.class, "group": group, "inputs": input_names(s, n.id), "disabled": n.disabled, "x": n.x, "y": n.y })
+        })
         .collect();
     Ok(json!(list))
 }

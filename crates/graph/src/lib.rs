@@ -18,7 +18,7 @@ use nukecraft_time::{Fps, FrameRange, FrameTime};
 use serde::{Deserialize, Serialize};
 
 /// The schema this version writes. Files with a newer schema are refused rather than misread.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 /// The NukeCraft version, written into `savedBy`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -34,6 +34,9 @@ pub const MAX_COMPONENTS: usize = 64;
 
 /// The longest text a knob may hold, in bytes.
 pub const MAX_TEXT: usize = 64 * 1024;
+
+/// How deep groups may nest.
+pub const MAX_NESTING: usize = 64;
 
 /// A node's stable identity within a script.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -98,6 +101,10 @@ pub struct Node {
     pub disabled: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    /// The Group node this node is inside; `None` at the top level. Names are unique among the
+    /// nodes of one group, and pipes connect nodes of the same group only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<NodeId>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -124,6 +131,10 @@ pub enum GraphError {
     BadName(String),
     #[error("connecting {from} into {node} would make a cycle")]
     Cycle { node: String, from: String },
+    #[error("{from} and {node} are in different groups: pipes connect nodes of the same group")]
+    CrossGroup { node: String, from: String },
+    #[error("{0}")]
+    BadGroup(String),
     #[error("input {0} is out of range (at most {MAX_INPUTS} inputs)")]
     BadInput(usize),
     #[error("a script holds at most {MAX_NODES} nodes")]
@@ -353,43 +364,127 @@ impl Script {
         self.nodes.iter_mut().find(|n| n.id == id)
     }
 
-    pub fn by_name(&self, name: &str) -> Option<&Node> {
-        self.nodes.iter().find(|n| n.name == name)
+    /// A node by name: a top-level name (`Blur1`) or a path through groups (`Group1.Blur1`).
+    pub fn by_name(&self, path: &str) -> Option<&Node> {
+        let mut parent = None;
+        let mut found = None;
+        for part in path.split('.') {
+            let n = self.child_by_name(parent, part)?;
+            parent = Some(n.id);
+            found = Some(n);
+        }
+        found
     }
 
-    /// The id of a node by name, or an error naming it.
+    /// The node named `name` directly inside `parent` (`None`: the top level).
+    pub fn child_by_name(&self, parent: Option<NodeId>, name: &str) -> Option<&Node> {
+        self.nodes.iter().find(|n| n.parent == parent && n.name == name)
+    }
+
+    /// The nodes directly inside `parent` (`None`: the top level), in creation order.
+    pub fn children(&self, parent: Option<NodeId>) -> impl Iterator<Item = &Node> {
+        self.nodes.iter().filter(move |n| n.parent == parent)
+    }
+
+    /// Every node inside `id`, at any depth.
+    pub fn descendants(&self, id: NodeId) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack = vec![id];
+        while let Some(p) = stack.pop() {
+            if out.len() >= MAX_NODES {
+                break;
+            }
+            for n in self.nodes.iter().filter(|n| n.parent == Some(p) && n.id != id) {
+                if !out.contains(&n.id) {
+                    out.push(n.id);
+                    stack.push(n.id);
+                }
+            }
+        }
+        out
+    }
+
+    /// The id of a node by name or path, or an error naming it.
     pub fn id_of(&self, name: &str) -> Result<NodeId> {
         self.by_name(name).map(|n| n.id).ok_or_else(|| GraphError::NoSuchNode(name.into()))
     }
 
-    /// The name of a node by id.
+    /// The name of a node by id (its own name, without its groups).
     pub fn name_of(&self, id: NodeId) -> Result<&str> {
         self.node(id).map(|n| n.name.as_str()).ok_or(GraphError::NoSuchId(id.0))
     }
 
-    /// `prefix` followed by the smallest number ≥ 1 that makes an unused name (`Blur1`, `Blur2`…).
+    /// The path of a node: its name, preceded by its groups' (`Group1.Blur1`). This is what
+    /// commands take to name nodes inside groups.
+    pub fn path_of(&self, id: NodeId) -> Result<String> {
+        let mut parts = Vec::new();
+        let mut cur = Some(id);
+        while let Some(c) = cur {
+            if parts.len() > MAX_NESTING {
+                return Err(GraphError::BadGroup("groups nest too deep".into()));
+            }
+            let n = self.node(c).ok_or(GraphError::NoSuchId(c.0))?;
+            parts.push(n.name.as_str());
+            cur = n.parent;
+        }
+        parts.reverse();
+        Ok(parts.join("."))
+    }
+
+    /// How many groups a node is inside.
+    pub fn depth_of(&self, id: NodeId) -> usize {
+        let mut depth = 0;
+        let mut cur = self.node(id).and_then(|n| n.parent);
+        while let Some(c) = cur {
+            depth += 1;
+            if depth > MAX_NESTING {
+                break;
+            }
+            cur = self.node(c).and_then(|n| n.parent);
+        }
+        depth
+    }
+
+    /// `prefix` followed by the smallest number ≥ 1 that makes an unused top-level name
+    /// (`Blur1`, `Blur2`…).
     pub fn unique_name(&self, prefix: &str) -> String {
-        let taken: HashSet<&str> = self.nodes.iter().map(|n| n.name.as_str()).collect();
+        self.unique_name_in(None, prefix)
+    }
+
+    /// [`Script::unique_name`] among the nodes inside `parent`.
+    pub fn unique_name_in(&self, parent: Option<NodeId>, prefix: &str) -> String {
+        let taken: HashSet<&str> = self.children(parent).map(|n| n.name.as_str()).collect();
         let prefix = if is_valid_name(prefix) { prefix } else { "Node" };
         (1..).map(|i| format!("{prefix}{i}")).find(|n| !taken.contains(n.as_str())).unwrap_or_else(|| format!("{prefix}_"))
     }
 
-    /// Adds a node of `class`, named `name` or `<class>N`. Returns its id.
+    /// Adds a top-level node of `class`, named `name` or `<class>N`. Returns its id.
     pub fn add_node(&mut self, class: &str, name: Option<&str>) -> Result<NodeId> {
+        self.add_node_in(None, class, name)
+    }
+
+    /// Adds a node inside the group `parent` (`None`: the top level).
+    pub fn add_node_in(&mut self, parent: Option<NodeId>, class: &str, name: Option<&str>) -> Result<NodeId> {
         if self.nodes.len() >= MAX_NODES {
             return Err(GraphError::TooManyNodes);
+        }
+        if let Some(p) = parent {
+            self.node(p).ok_or(GraphError::NoSuchId(p.0))?;
+            if self.depth_of(p) + 1 > MAX_NESTING {
+                return Err(GraphError::BadGroup(format!("groups nest at most {MAX_NESTING} deep")));
+            }
         }
         let name = match name {
             Some(n) => {
                 if !is_valid_name(n) {
                     return Err(GraphError::BadName(n.into()));
                 }
-                if self.by_name(n).is_some() {
+                if self.child_by_name(parent, n).is_some() {
                     return Err(GraphError::NameTaken(n.into()));
                 }
                 n.to_string()
             }
-            None => self.unique_name(class),
+            None => self.unique_name_in(parent, class),
         };
         let id = NodeId(self.next_id);
         self.next_id = self.next_id.saturating_add(1);
@@ -403,13 +498,63 @@ impl Script {
             y: 0.0,
             disabled: false,
             label: String::new(),
+            parent,
         });
         Ok(id)
+    }
+
+    /// Moves a node into the group `parent` (`None`: the top level). Pipes that would cross the
+    /// group boundary are disconnected and returned as `(node, input)`. Refuses a name already
+    /// taken there and moving a group into itself.
+    pub fn set_parent(&mut self, id: NodeId, parent: Option<NodeId>) -> Result<Vec<(NodeId, usize)>> {
+        let node = self.node(id).ok_or(GraphError::NoSuchId(id.0))?;
+        let name = node.name.clone();
+        if let Some(p) = parent {
+            self.node(p).ok_or(GraphError::NoSuchId(p.0))?;
+            if p == id || self.descendants(id).contains(&p) {
+                return Err(GraphError::BadGroup(format!("`{name}` can't go inside itself")));
+            }
+            if self.depth_of(p) + 1 + self.subtree_depth(id) > MAX_NESTING {
+                return Err(GraphError::BadGroup(format!("groups nest at most {MAX_NESTING} deep")));
+            }
+        }
+        if self.child_by_name(parent, &name).is_some_and(|n| n.id != id) {
+            return Err(GraphError::NameTaken(name));
+        }
+        // Pipes into it from outside the new group, and from it to outside, are cut.
+        let mut cut = Vec::new();
+        let inputs: Vec<(usize, NodeId)> = node.inputs.iter().enumerate().filter_map(|(i, f)| f.map(|f| (i, f))).collect();
+        for (i, f) in inputs {
+            if self.node(f).map(|n| n.parent) != Some(parent) {
+                cut.push((id, i));
+            }
+        }
+        for (c, i) in self.consumers(id) {
+            if self.node(c).map(|n| n.parent) != Some(parent) {
+                cut.push((c, i));
+            }
+        }
+        for (n, i) in &cut {
+            self.disconnect(*n, *i)?;
+        }
+        if let Some(n) = self.node_mut(id) {
+            n.parent = parent;
+        }
+        Ok(cut)
+    }
+
+    /// How many levels of groups lie inside `id` (0 for a node with no children).
+    fn subtree_depth(&self, id: NodeId) -> usize {
+        self.descendants(id).iter().map(|d| self.depth_of(*d).saturating_sub(self.depth_of(id))).max().unwrap_or(0)
     }
 
     /// Removes a node and disconnects everything it fed. Returns the node and the inputs
     /// `(node, input)` it was connected to.
     pub fn remove_node(&mut self, id: NodeId) -> Result<(Node, Vec<(NodeId, usize)>)> {
+        self.node(id).ok_or(GraphError::NoSuchId(id.0))?;
+        // A group takes its contents with it.
+        let inside = self.descendants(id);
+        self.nodes.retain(|n| !inside.contains(&n.id));
         let pos = self.nodes.iter().position(|n| n.id == id).ok_or(GraphError::NoSuchId(id.0))?;
         let consumers = self.consumers(id);
         for (c, i) in &consumers {
@@ -425,7 +570,8 @@ impl Script {
         if !is_valid_name(name) {
             return Err(GraphError::BadName(name.into()));
         }
-        if self.by_name(name).is_some_and(|n| n.id != id) {
+        let parent = self.node(id).ok_or(GraphError::NoSuchId(id.0))?.parent;
+        if self.child_by_name(parent, name).is_some_and(|n| n.id != id) {
             return Err(GraphError::NameTaken(name.into()));
         }
         let node = self.node_mut(id).ok_or(GraphError::NoSuchId(id.0))?;
@@ -469,7 +615,11 @@ impl Script {
         if input >= MAX_INPUTS {
             return Err(GraphError::BadInput(input));
         }
-        self.node(from).ok_or(GraphError::NoSuchId(from.0))?;
+        let from_parent = self.node(from).ok_or(GraphError::NoSuchId(from.0))?.parent;
+        let node_parent = self.node(node).ok_or(GraphError::NoSuchId(node.0))?.parent;
+        if from_parent != node_parent {
+            return Err(GraphError::CrossGroup { node: self.path_of(node)?, from: self.path_of(from)? });
+        }
         if self.is_upstream(from, node) {
             return Err(GraphError::Cycle { node: self.name_of(node)?.into(), from: self.name_of(from)?.into() });
         }
@@ -534,9 +684,9 @@ impl Script {
                 warnings.push(format!("node `{}`: duplicate id {old_id}, given a new one", n.name));
                 n.id = NodeId(0);
             }
-            if !is_valid_name(&n.name) || script.by_name(&n.name).is_some() {
-                let fresh = script.unique_name(if is_valid_name(&n.class) { &n.class } else { "Node" });
-                warnings.push(format!("node `{}`: invalid or duplicate name, renamed to `{fresh}`", n.name));
+            if !is_valid_name(&n.name) {
+                let fresh = format!("{}_{}", if is_valid_name(&n.class) { &n.class } else { "Node" }, script.nodes.len() + 1);
+                warnings.push(format!("node `{}`: invalid name, renamed to `{fresh}`", n.name));
                 n.name = fresh;
             }
             if n.inputs.len() > MAX_INPUTS {
@@ -567,6 +717,48 @@ impl Script {
                 script.next_id = script.next_id.saturating_add(1);
                 if let Some(p) = pending.get_mut(i) {
                     p.0 = n.id;
+                }
+            }
+        }
+
+        // Groups: parents that are missing, or that would nest a node inside itself or too
+        // deep, are dropped (the node moves to the top level).
+        let parents: Vec<(NodeId, Option<NodeId>)> = script.nodes.iter().map(|n| (n.id, n.parent.and_then(|p| id_map.get(&p.0).copied()))).collect();
+        for (n, (_, p)) in script.nodes.iter_mut().zip(&parents) {
+            if n.parent.is_some() && p.is_none() {
+                warnings.push(format!("node `{}`: its group is missing, moved to the top level", n.name));
+            }
+            n.parent = *p;
+        }
+        for (id, _) in &parents {
+            let mut seen = Vec::new();
+            let mut cur = script.node(*id).and_then(|n| n.parent);
+            let mut bad = false;
+            while let Some(c) = cur {
+                if c == *id || seen.contains(&c) || seen.len() >= MAX_NESTING {
+                    bad = true;
+                    break;
+                }
+                seen.push(c);
+                cur = script.node(c).and_then(|n| n.parent);
+            }
+            if bad && let Some(n) = script.node_mut(*id) {
+                warnings.push(format!("node `{}`: groups loop or nest too deep, moved to the top level", n.name));
+                n.parent = None;
+            }
+        }
+        // Names are unique within each group.
+        for i in 0..script.nodes.len() {
+            let (id, parent, name) = match script.nodes.get(i) {
+                Some(n) => (n.id, n.parent, n.name.clone()),
+                None => continue,
+            };
+            if script.nodes.iter().any(|o| o.id != id && o.parent == parent && o.name == name) {
+                let base = name.trim_end_matches(|c: char| c.is_ascii_digit());
+                let fresh = script.unique_name_in(parent, if is_valid_name(base) { base } else { "Node" });
+                warnings.push(format!("node `{name}`: duplicate name, renamed to `{fresh}`"));
+                if let Some(n) = script.nodes.get_mut(i) {
+                    n.name = fresh;
                 }
             }
         }
@@ -621,6 +813,56 @@ mod tests {
         assert!(matches!(s.connect(a, 0, c), Err(GraphError::Cycle { .. })));
         assert!(matches!(s.connect(a, 0, a), Err(GraphError::Cycle { .. })));
         assert!(s.connect(c, 1, a).is_ok(), "a diamond is fine");
+    }
+
+    #[test]
+    fn groups_scope_names_and_pipes() {
+        let mut s = Script::new();
+        let top = s.add_node("Blur", None).unwrap();
+        let g = s.add_node("Group", None).unwrap();
+        let inner = s.add_node_in(Some(g), "Blur", None).unwrap();
+        assert_eq!(s.name_of(inner).unwrap(), "Blur1", "names are per group");
+        assert_eq!(s.path_of(inner).unwrap(), "Group1.Blur1");
+        assert_eq!(s.id_of("Group1.Blur1").unwrap(), inner);
+        assert_eq!(s.id_of("Blur1").unwrap(), top);
+        assert!(s.by_name("Group1.Nope").is_none() && s.by_name("Blur1.Blur1").is_none());
+        assert!(matches!(s.connect(inner, 0, top), Err(GraphError::CrossGroup { .. })));
+        let inner2 = s.add_node_in(Some(g), "Grade", None).unwrap();
+        s.connect(inner2, 0, inner).unwrap();
+        assert_eq!(s.children(Some(g)).count(), 2);
+        // Moving a node out cuts the pipes that would cross.
+        let cut = s.set_parent(inner, None).unwrap_err();
+        assert_eq!(cut, GraphError::NameTaken("Blur1".into()), "Blur1 is taken at the top");
+        s.rename(inner, "Soft").unwrap();
+        assert_eq!(s.set_parent(inner, None).unwrap(), vec![(inner2, 0)]);
+        assert_eq!(s.node(inner2).unwrap().input(0), None);
+        assert!(matches!(s.set_parent(g, Some(g)), Err(GraphError::BadGroup(_))));
+        // Removing a group removes its contents; the file round-trips.
+        let text = s.to_json().unwrap();
+        let (back, warnings) = Script::from_json(&text).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(back.path_of(inner2).unwrap(), "Group1.Grade1");
+        s.remove_node(g).unwrap();
+        assert!(s.node(inner2).is_none());
+    }
+
+    #[test]
+    fn broken_groups_in_files_are_repaired() {
+        let text = r#"{"schema": 1, "nodes": [
+            {"id": 1, "name": "A", "class": "Group", "parent": 2},
+            {"id": 2, "name": "B", "class": "Group", "parent": 1},
+            {"id": 3, "name": "C", "class": "Blur", "parent": 99},
+            {"id": 4, "name": "D", "class": "Blur", "parent": 5},
+            {"id": 5, "name": "G", "class": "Group"},
+            {"id": 6, "name": "D", "class": "Blur", "parent": 5}
+        ]}"#;
+        let (s, warnings) = Script::from_json(text).unwrap();
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(s.by_name("C").map(|n| n.parent), Some(None), "missing group: top level");
+        assert!(s.by_name("A").unwrap().parent.is_none() || s.by_name("B").unwrap().parent.is_none(), "the loop is broken");
+        assert_eq!(s.children(s.by_name("G").map(|n| n.id)).count(), 2);
+        let names: HashSet<&str> = s.children(s.by_name("G").map(|n| n.id)).map(|n| n.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "duplicate names inside a group are made unique");
     }
 
     #[test]
