@@ -73,7 +73,7 @@ fn filter(ctx: &Ctx) -> Filter {
 }
 
 /// The bounding box of `r` mapped through `m`.
-fn map_rect(m: Affine, r: IRect) -> IRect {
+pub(crate) fn map_rect(m: Affine, r: IRect) -> IRect {
     if r.is_empty() {
         return IRect::EMPTY;
     }
@@ -87,7 +87,7 @@ fn map_rect(m: Affine, r: IRect) -> IRect {
 }
 
 /// Input pixels per output pixel along each input axis (≥ 1), from the inverse matrix.
-fn footprint(inv: Affine) -> (f64, f64) {
+pub(crate) fn footprint(inv: Affine) -> (f64, f64) {
     (inv.a.hypot(inv.b).clamp(1.0, MAX_TAPS), inv.d.hypot(inv.e).clamp(1.0, MAX_TAPS))
 }
 
@@ -107,14 +107,23 @@ fn transform_request(ctx: &Ctx, _: &ImageInfo, _: &[Option<ImageInfo>], region: 
 }
 
 fn transform_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], region: IRect) -> Result<Image> {
+    let Some(inv) = matrix(ctx).and_then(Affine::inverse) else { return Ok(Image::new(region, info.channels.clone())?) };
+    let (fx, fy) = footprint(inv);
+    let map = |p: V2| Some((inv.apply(p), fx, fy));
+    resample(info, input_image(inputs, 0), region, filter(ctx), ctx.knobs.boolean("black_outside"), &map)
+}
+
+/// Where an output pixel centre reads from in the input, and the input pixels per output pixel
+/// along each input axis there (≥ 1; the kernel widens by them). `None`: nothing (black).
+pub(crate) type WarpFn<'a> = &'a dyn Fn(V2) -> Option<(V2, f64, f64)>;
+
+/// Fills `region` by mapping each output pixel centre back into `input` with `map` and filtering
+/// there. Outside the input's bbox the source is black (`black_outside`) or its edge repeated.
+pub(crate) fn resample(info: &ImageInfo, input: Option<&Input>, region: IRect, f: Filter, black_outside: bool, map: WarpFn) -> Result<Image> {
     let mut out = Image::new(region, info.channels.clone())?;
-    let (Some(inv), Some(inp)) = (matrix(ctx).and_then(Affine::inverse), input_image(inputs, 0)) else { return Ok(out) };
-    let black_outside = ctx.knobs.boolean("black_outside");
+    let Some(inp) = input else { return Ok(out) };
     let src_bbox = inp.info.bbox;
     let src = &inp.image;
-    let f = filter(ctx);
-    let (fx, fy) = footprint(inv);
-    let (rx, ry) = (f.support() * fx, f.support() * fy);
     let chans: Vec<Option<usize>> = info.channels.iter().map(|c| src.channels().index_of(c)).collect();
     // Source value with Nuke's outside rule: black beyond the input bbox, or its edge repeated.
     let read = |i: usize, x: i32, y: i32| if black_outside && !src_bbox.contains(x, y) { 0.0 } else { src.get_at(i, x, y) };
@@ -122,10 +131,11 @@ fn transform_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], regio
     let mut wy = Vec::new();
     for y in region.y0..region.y1 {
         for x in region.x0..region.x1 {
-            let p = inv.apply(V2::new(x as f64 + 0.5, y as f64 + 0.5));
+            let Some((p, fx, fy)) = map(V2::new(x as f64 + 0.5, y as f64 + 0.5)) else { continue };
             if !p.is_finite() {
                 continue;
             }
+            let (fx, fy) = (clamp_footprint(fx), clamp_footprint(fy));
             if f == Filter::Impulse {
                 let (sx, sy) = (clamp_coord(p.x.floor()), clamp_coord(p.y.floor()));
                 for (oi, si) in chans.iter().enumerate() {
@@ -135,6 +145,7 @@ fn transform_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], regio
                 }
                 continue;
             }
+            let (rx, ry) = (f.support() * fx, f.support() * fy);
             // Taps: source pixel centres within the kernel's reach.
             let (x0, x1) = (clamp_coord((p.x - rx - 0.5).ceil()), clamp_coord((p.x + rx - 0.5).floor()));
             let (y0, y1) = (clamp_coord((p.y - ry - 0.5).ceil()), clamp_coord((p.y + ry - 0.5).floor()));
@@ -163,7 +174,12 @@ fn transform_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], regio
     Ok(out)
 }
 
-fn clamp_coord(v: f64) -> i32 {
+/// A footprint kept within 1..[`MAX_TAPS`] (and finite).
+pub(crate) fn clamp_footprint(v: f64) -> f64 {
+    if v.is_finite() { v.clamp(1.0, MAX_TAPS) } else { MAX_TAPS }
+}
+
+pub(crate) fn clamp_coord(v: f64) -> i32 {
     v.clamp(-(nukecraft_geom::MAX_COORD as f64), nukecraft_geom::MAX_COORD as f64) as i32
 }
 

@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F17); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F18); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -68,6 +68,7 @@ pub fn cases() -> Vec<Case> {
     masks(&mut out);
     channels(&mut out);
     draw_and_mix(&mut out);
+    reformat(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -538,6 +539,74 @@ fn draw_and_mix(out: &mut Vec<Case>) {
             ],
             vec![sample("D", vec![(5, 5)], &RGBA)],
         ));
+    }
+}
+
+/// Every `step`-th pixel of a `w`×`h` area.
+fn grid_of(w: i32, h: i32, step: i32) -> Vec<(i32, i32)> {
+    let mut v = Vec::new();
+    for y in (0..h).step_by(step as usize) {
+        for x in (0..w).step_by(step as usize) {
+            v.push((x, y));
+        }
+    }
+    v
+}
+
+/// F18: Reformat, Mirror2, Position, CornerPin2D, measured on the coordinate image.
+fn reformat(out: &mut Vec<Case>) {
+    let with = |id: &str, title: &str, node: NodeDef, points: Vec<(i32, i32)>| {
+        let mut nodes = coordinates();
+        nodes.push(node.input(0, "Coords"));
+        case(id, "F18", title, nodes, vec![sample("N", points, &["rgba.red", "rgba.green"])])
+    };
+    for resize in ["none", "width", "height", "fit", "fill", "distort"] {
+        let node = NodeDef::new("N", "Reformat")
+            .knob("type", json!("to box"))
+            .knob("box_width", json!(32))
+            .knob("box_height", json!(48))
+            .knob("box_fixed", json!(true))
+            .knob("resize", json!(resize))
+            .knob("filter", json!("Impulse"));
+        out.push(with(&format!("reformat.box.{resize}"), "The coordinate image (64x64) reformatted to a 32x48 box", node, grid_of(32, 48, 3)));
+    }
+    let cases = [
+        ("reformat.box.cubic", json!({ "type": "to box", "box_width": 32, "box_height": 48, "box_fixed": true, "resize": "width", "filter": "Cubic" })),
+        (
+            "reformat.box.uncentred",
+            json!({ "type": "to box", "box_width": 32, "box_height": 48, "box_fixed": true, "resize": "width", "center": false, "filter": "Impulse" }),
+        ),
+        ("reformat.box.unfixed", json!({ "type": "to box", "box_width": 40, "resize": "width", "filter": "Impulse" })),
+        ("reformat.scale.half", json!({ "type": "scale", "scale": 0.5, "filter": "Impulse" })),
+        ("reformat.scale.half_cubic", json!({ "type": "scale", "scale": 0.5 })),
+        ("reformat.scale.xy", json!({ "type": "scale", "scale": [1.5, 0.75], "filter": "Impulse" })),
+        ("reformat.flip_flop", json!({ "type": "scale", "flip": true, "flop": true, "filter": "Impulse" })),
+        ("reformat.turn", json!({ "type": "scale", "scale": [0.5, 1], "turn": true, "filter": "Impulse" })),
+    ];
+    for (id, knobs) in cases {
+        out.push(with(id, "The coordinate image (64x64) through Reformat", with_knobs(NodeDef::new("N", "Reformat"), knobs), grid_of(64, 64, 5)));
+    }
+    for (id, knobs) in
+        [("mirror.flip", json!({ "flip": true })), ("mirror.flop", json!({ "flop": true })), ("mirror.both", json!({ "flip": true, "flop": true }))]
+    {
+        out.push(with(id, "The coordinate image through Mirror2", with_knobs(NodeDef::new("N", "Mirror2"), knobs), grid_of(64, 64, 7)));
+    }
+    out.push(with(
+        "position.fractional",
+        "The coordinate image through Position (7.4, -3.6)",
+        NodeDef::new("N", "Position").knob("translate", json!([7.4, -3.6])),
+        grid_of(64, 64, 7),
+    ));
+    let quad =
+        json!({ "to1": [6, 4], "to2": [58, 10], "to3": [50, 60], "to4": [2, 52], "from1": [0, 0], "from2": [64, 0], "from3": [64, 64], "from4": [0, 64] });
+    for (id, extra) in [
+        ("cornerpin.impulse", json!({ "filter": "Impulse" })),
+        ("cornerpin.cubic", json!({ "filter": "Cubic" })),
+        ("cornerpin.disabled", json!({ "filter": "Impulse", "enable3": false })),
+        ("cornerpin.invert", json!({ "filter": "Impulse", "invert": true })),
+    ] {
+        let node = with_knobs(with_knobs(NodeDef::new("N", "CornerPin2D"), quad.clone()), extra);
+        out.push(with(id, "The coordinate image through CornerPin2D onto a quad", node, grid_of(64, 64, 5)));
     }
 }
 

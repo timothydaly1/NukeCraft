@@ -23,6 +23,7 @@ mod image_nodes;
 pub mod knobs;
 mod merge;
 mod other_nodes;
+mod reformat;
 mod transform;
 
 use nukecraft_geom::{Format, IRect};
@@ -199,6 +200,7 @@ impl Registry {
             .chain(draw::specs())
             .chain(merge::specs())
             .chain(transform::specs())
+            .chain(reformat::specs())
             .chain(blur::specs())
             .chain(other_nodes::specs())
         {
@@ -362,6 +364,7 @@ mod tests {
             + draw::specs().len()
             + merge::specs().len()
             + transform::specs().len()
+            + reformat::specs().len()
             + blur::specs().len()
             + other_nodes::specs().len();
         assert_eq!(r.iter().count(), n, "a built-in class name or alias collides");

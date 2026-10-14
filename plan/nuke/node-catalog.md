@@ -99,8 +99,11 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 |---|---|---|
 | Transform | ✅ | Impulse + six cubics; no motion blur, Notch/Lanczos/Sinc, on-viewer handle [M1/M6] |
 | Crop | ✅ | No softness |
-| Reformat | — | [M2] |
-| CornerPin2D, Mirror, Position, Tile | — | [M2] |
+| Reformat | ◐ | To format, to box, scale; six resize types, centre, flip/flop/turn, filter, black outside, preserve bbox; no `clamp` (F18) |
+| Mirror (Mirror2) | ✅ | flip, flop (exact) |
+| Position | ✅ | Whole pixels (F18: rounding unverified) |
+| CornerPin2D | ◐ | Four corners, enables, invert, filter; no extra matrix, motion blur or on-viewer handles |
+| Tile | — | |
 | Tracker, PlanarTracker, CameraTracker | — | [M6] |
 | STMap, IDistort, SplineWarp, GridWarp, LensDistortion | — | [M6] |
 | AdjustBBox, BlackOutside, TransformMasked, SphericalTransform | — | |

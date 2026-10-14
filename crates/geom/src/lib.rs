@@ -32,6 +32,13 @@ pub struct Affine {
     pub f: f64,
 }
 
+/// A 2D projective transform (CornerPin's): `(x', y') = ((m0·x + m1·y + m2) / w, (m3·x + m4·y + m5) / w)`
+/// with `w = m6·x + m7·y + m8`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Homography {
+    pub m: [f64; 9],
+}
+
 /// A half-open integer pixel box `[x0, x1) × [y0, y1)`: a node's bbox (data window) or a
 /// region of interest. Empty when `x1 <= x0` or `y1 <= y0`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -194,6 +201,112 @@ impl Default for Affine {
     }
 }
 
+impl Homography {
+    pub const IDENTITY: Homography = Homography { m: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0] };
+
+    /// The transform taking each `from[i]` to `to[i]`, or `None` when the quads are degenerate
+    /// (three points in a line, or not finite).
+    pub fn from_quads(from: [V2; 4], to: [V2; 4]) -> Option<Homography> {
+        // Eight equations in m0..m7 (m8 = 1): for each pair,
+        // x' (m6 x + m7 y + 1) = m0 x + m1 y + m2 and likewise for y'.
+        let mut a = [[0.0f64; 9]; 8];
+        for (i, (p, q)) in from.iter().zip(to.iter()).enumerate() {
+            let (x, y, u, v) = (p.x, p.y, q.x, q.y);
+            let r0 = [x, y, 1.0, 0.0, 0.0, 0.0, -u * x, -u * y, u];
+            let r1 = [0.0, 0.0, 0.0, x, y, 1.0, -v * x, -v * y, v];
+            *a.get_mut(2 * i)? = r0;
+            *a.get_mut(2 * i + 1)? = r1;
+        }
+        let sol = solve8(a)?;
+        let h = Homography { m: [sol[0], sol[1], sol[2], sol[3], sol[4], sol[5], sol[6], sol[7], 1.0] };
+        (h.is_finite() && h.determinant().abs() > 1e-12).then_some(h)
+    }
+
+    /// Where `p` maps, or `None` for a point on or behind the horizon (`w <= 0`).
+    pub fn apply(self, p: V2) -> Option<V2> {
+        let m = self.m;
+        let w = m[6] * p.x + m[7] * p.y + m[8];
+        if w.is_nan() || w <= 1e-12 {
+            return None;
+        }
+        let q = V2::new((m[0] * p.x + m[1] * p.y + m[2]) / w, (m[3] * p.x + m[4] * p.y + m[5]) / w);
+        q.is_finite().then_some(q)
+    }
+
+    /// The derivatives of the mapped x and y at `p`: `[[dx'/dx, dx'/dy], [dy'/dx, dy'/dy]]`.
+    pub fn jacobian(self, p: V2) -> Option<[[f64; 2]; 2]> {
+        let m = self.m;
+        let w = m[6] * p.x + m[7] * p.y + m[8];
+        if w.is_nan() || w <= 1e-12 {
+            return None;
+        }
+        let q = self.apply(p)?;
+        Some([[(m[0] - q.x * m[6]) / w, (m[1] - q.x * m[7]) / w], [(m[3] - q.y * m[6]) / w, (m[4] - q.y * m[7]) / w]])
+    }
+
+    pub fn determinant(self) -> f64 {
+        let m = self.m;
+        m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])
+    }
+
+    /// The inverse, scaled so `m8` is 1 where possible, or `None` when singular.
+    pub fn inverse(self) -> Option<Homography> {
+        let m = self.m;
+        let det = self.determinant();
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        let adj = [
+            m[4] * m[8] - m[5] * m[7],
+            m[2] * m[7] - m[1] * m[8],
+            m[1] * m[5] - m[2] * m[4],
+            m[5] * m[6] - m[3] * m[8],
+            m[0] * m[8] - m[2] * m[6],
+            m[2] * m[3] - m[0] * m[5],
+            m[3] * m[7] - m[4] * m[6],
+            m[1] * m[6] - m[0] * m[7],
+            m[0] * m[4] - m[1] * m[3],
+        ];
+        // Keep w positive for points in front: scale by 1/det's sign and magnitude.
+        let inv = Homography { m: adj.map(|v| v / det) };
+        inv.is_finite().then_some(inv)
+    }
+
+    pub fn is_finite(self) -> bool {
+        self.m.iter().all(|v| v.is_finite())
+    }
+}
+
+/// Solves an 8×8 linear system given as rows `[a0..a7 | b]` by Gaussian elimination with
+/// partial pivoting; `None` when it is singular.
+fn solve8(mut a: [[f64; 9]; 8]) -> Option<[f64; 8]> {
+    for col in 0..8 {
+        let pivot = (col..8).max_by(|&i, &j| a[i][col].abs().total_cmp(&a[j][col].abs()))?;
+        let p = a.get(pivot)?.get(col)?.abs();
+        if p.is_nan() || p <= 1e-12 {
+            return None;
+        }
+        a.swap(col, pivot);
+        let prow = *a.get(col)?;
+        for row in 0..8 {
+            if row == col {
+                continue;
+            }
+            let r = a.get_mut(row)?;
+            let f = r[col] / prow[col];
+            for k in col..9 {
+                r[k] -= f * prow[k];
+            }
+        }
+    }
+    let mut x = [0.0; 8];
+    for (i, xi) in x.iter_mut().enumerate() {
+        let r = a.get(i)?;
+        *xi = r[8] / r[i];
+    }
+    x.iter().all(|v| v.is_finite()).then_some(x)
+}
+
 impl IRect {
     pub const EMPTY: IRect = IRect { x0: 0, y0: 0, x1: 0, y1: 0 };
 
@@ -336,6 +449,32 @@ mod tests {
         assert!(close(inv.apply(m.apply(p)), p));
         assert!(Affine::scale(V2::new(0.0, 1.0)).inverse().is_none());
         assert!(Affine::scale(V2::new(f64::NAN, 1.0)).inverse().is_none());
+    }
+
+    #[test]
+    fn homography_maps_quads_and_inverts() {
+        let from = [V2::new(0.0, 0.0), V2::new(10.0, 0.0), V2::new(10.0, 10.0), V2::new(0.0, 10.0)];
+        let to = [V2::new(1.0, 2.0), V2::new(21.0, 0.0), V2::new(18.0, 15.0), V2::new(3.0, 11.0)];
+        let h = Homography::from_quads(from, to).unwrap();
+        for (p, q) in from.iter().zip(to) {
+            assert!(close(h.apply(*p).unwrap(), q));
+        }
+        let inv = h.inverse().unwrap();
+        let p = V2::new(4.0, 7.0);
+        assert!(close(inv.apply(h.apply(p).unwrap()).unwrap(), p));
+        // The Jacobian matches finite differences.
+        let j = h.jacobian(p).unwrap();
+        let e = 1e-6;
+        let dx = (h.apply(V2::new(p.x + e, p.y)).unwrap() - h.apply(p).unwrap()) * (1.0 / e);
+        assert!((j[0][0] - dx.x).abs() < 1e-4 && (j[1][0] - dx.y).abs() < 1e-4);
+        // An affine quad gives an affine homography.
+        let shifted = from.map(|p| p + V2::new(5.0, -3.0));
+        let t = Homography::from_quads(from, shifted).unwrap();
+        assert!(close(t.apply(V2::new(2.0, 2.0)).unwrap(), V2::new(7.0, -1.0)));
+        // Degenerate: three points in a line, or not finite.
+        let line = [V2::new(0.0, 0.0), V2::new(1.0, 0.0), V2::new(2.0, 0.0), V2::new(3.0, 0.0)];
+        assert!(Homography::from_quads(from, line).is_none());
+        assert!(Homography::from_quads(from, [V2::new(f64::NAN, 0.0), to[1], to[2], to[3]]).is_none());
     }
 
     #[test]

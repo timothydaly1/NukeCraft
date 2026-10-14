@@ -42,9 +42,9 @@ pub enum KnobDefault {
     FormatCenter,
     /// The root format's box (Crop's `box`).
     FormatBox,
-    /// A box at fractions of the root format: `[x, y, r, t]` times width and height
-    /// (Rectangle's `area`).
-    FormatFraction(&'static [f64; 4]),
+    /// Fractions of the root format, alternately of its width and height: `[x, y, r, t]` for a
+    /// box (Rectangle's `area`), `[x, y]` for a point (CornerPin2D's corners).
+    FormatFraction(&'static [f64]),
 }
 
 impl KnobDefault {
@@ -120,9 +120,10 @@ impl KnobSpec {
                 KnobValue::numbers(&[c.x, c.y])
             }
             KnobDefault::FormatBox => KnobValue::numbers(&[0.0, 0.0, format.width as f64, format.height as f64]),
-            KnobDefault::FormatFraction([x, y, r, t]) => {
+            KnobDefault::FormatFraction(fs) => {
                 let (w, h) = (format.width as f64, format.height as f64);
-                KnobValue::numbers(&[x * w, y * h, r * w, t * h])
+                let v: Vec<f64> = fs.iter().enumerate().map(|(i, f)| f * if i % 2 == 0 { w } else { h }).collect();
+                KnobValue::numbers(&v)
             }
         }
     }
