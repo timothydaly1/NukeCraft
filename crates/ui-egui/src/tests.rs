@@ -236,3 +236,77 @@ mod viewer {
         assert!(err.contains("Read1"), "{err}");
     }
 }
+
+mod properties {
+    use super::*;
+    use egui::{PointerButton, Vec2};
+    use nukecraft_graph::KnobValue;
+    use serde_json::json;
+
+    fn knob(h: &Headless, node: &str, knob: &str) -> Option<KnobValue> {
+        h.app.session.script.by_name(node).and_then(|n| n.knobs.get(knob)).cloned()
+    }
+
+    #[test]
+    fn dragging_a_number_is_one_undo_step() {
+        let mut h = demo();
+        h.click("graph.node.Blur1", 2, Modifiers::NONE).unwrap();
+        h.frames(2);
+        let field = h.app.automation.center("props.Blur1.size").expect("size field");
+        h.drag_at(field, field + Vec2::new(100.0, 0.0), PointerButton::Primary, Modifiers::NONE);
+        let v = knob(&h, "Blur1", "size").expect("size set");
+        let first = v.components().unwrap()[0].eval(nukecraft_time::FrameTime::ZERO);
+        assert!(first > 1.8, "dragged up from 1.5, got {first}");
+        assert_eq!(h.app.session.history(), ["Set size"], "one step for the whole drag");
+        h.key(egui::Key::Z, Modifiers::COMMAND);
+        assert_eq!(knob(&h, "Blur1", "size"), Some(KnobValue::number(1.5)));
+    }
+
+    #[test]
+    fn key_button_sets_and_deletes_keys() {
+        let mut h = demo();
+        h.click("graph.node.Grade1", 2, Modifiers::NONE).unwrap();
+        h.app.session.execute("time.goto", &json!({ "frame": 5 })).unwrap();
+        h.settle(Duration::from_secs(10));
+        h.click("props.Grade1.gamma.key", 1, Modifiers::NONE).unwrap();
+        assert!(knob(&h, "Grade1", "gamma").is_some_and(|v| v.is_animated()), "keyed");
+        h.click("props.Grade1.gamma.key", 1, Modifiers::NONE).unwrap();
+        assert!(!knob(&h, "Grade1", "gamma").is_some_and(|v| v.is_animated()), "the only key deleted");
+    }
+
+    #[test]
+    fn rename_and_disable() {
+        let mut h = demo();
+        h.click("graph.node.Blur1", 2, Modifiers::NONE).unwrap();
+        h.click("props.Blur1.name", 1, Modifiers::NONE).unwrap();
+        h.key(egui::Key::A, Modifiers::COMMAND);
+        h.text("Soften");
+        h.key(egui::Key::Enter, Modifiers::NONE);
+        h.settle(Duration::from_secs(5));
+        assert!(h.app.session.script.by_name("Soften").is_some(), "renamed");
+        h.click("props.Soften.disable", 1, Modifiers::NONE).unwrap();
+        assert!(h.app.session.script.by_name("Soften").unwrap().disabled);
+        // A name that's taken is refused and the field goes back.
+        h.click("props.Soften.name", 1, Modifiers::NONE).unwrap();
+        h.key(egui::Key::A, Modifiers::COMMAND);
+        h.text("Grade1");
+        h.key(egui::Key::Enter, Modifiers::NONE);
+        h.settle(Duration::from_secs(5));
+        assert!(h.app.session.script.by_name("Soften").is_some());
+    }
+
+    #[test]
+    fn text_knobs_commit_on_enter() {
+        let mut h = demo();
+        h.click("graph.node.Write1", 2, Modifiers::NONE).unwrap();
+        h.click("props.Write1.file", 1, Modifiers::NONE).unwrap();
+        h.key(egui::Key::A, Modifiers::COMMAND);
+        h.text("out/comp.####.exr");
+        // Nothing is committed while typing.
+        assert_eq!(knob(&h, "Write1", "file"), Some(KnobValue::text("nukecraft-demo.####.png")));
+        assert!(h.ctx().text_edit_focused(), "the field has focus while typing");
+        h.key(egui::Key::Enter, Modifiers::NONE);
+        h.settle(Duration::from_secs(5));
+        assert_eq!(knob(&h, "Write1", "file"), Some(KnobValue::text("out/comp.####.exr")));
+    }
+}

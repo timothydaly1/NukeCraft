@@ -15,6 +15,7 @@ mod dialogs;
 mod graph;
 pub mod keys;
 mod menus;
+mod properties;
 pub mod snapshot;
 pub mod theme;
 mod viewer;
@@ -45,6 +46,7 @@ pub struct NukecraftApp {
     pub(crate) open_props: Vec<NodeId>,
     pub(crate) graph: graph::GraphState,
     pub(crate) viewer: viewer::ViewerState,
+    pub(crate) props: properties::PropsState,
     pub(crate) dialogs: dialogs::Dialogs,
     status: Option<Status>,
     shortcuts: Vec<(KeyboardShortcut, &'static str)>,
@@ -101,6 +103,7 @@ impl NukecraftApp {
             open_props: Vec::new(),
             graph: graph::GraphState::default(),
             viewer: viewer::ViewerState::new(ctx),
+            props: properties::PropsState::default(),
             dialogs: dialogs::Dialogs::default(),
             status: None,
             shortcuts,
@@ -134,10 +137,7 @@ impl NukecraftApp {
 
         egui::Panel::top("menu").show(ui, |ui| menus::menu_bar(self, ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        egui::Panel::right("properties").resizable(true).default_size(380.0).min_size(240.0).show(ui, |ui| {
-            ui.heading("Properties");
-            ui.allocate_space(ui.available_size());
-        });
+        egui::Panel::right("properties").resizable(true).default_size(400.0).min_size(260.0).show(ui, |ui| properties::show(self, ui));
         egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).frame(egui::Frame::NONE).show(ui, |ui| graph::show(self, ui));
         egui::CentralPanel::no_frame().show(ui, |ui| viewer::show(self, ui));
 

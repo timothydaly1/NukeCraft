@@ -118,6 +118,8 @@ impl Headless {
             self.frame();
         }
         self.frames(2);
+        // Separate user actions are not one gesture: let egui's multi-click window lapse.
+        self.time += 0.5;
     }
 
     /// Moves the pointer.
@@ -129,6 +131,8 @@ impl Headless {
 
     /// A primary click at `pos` (`clicks` = 2 for a double click).
     pub fn click_at(&mut self, pos: Pos2, clicks: usize, modifiers: Modifiers) {
+        // A new gesture: earlier clicks must not merge into a double or triple click.
+        self.time += 0.5;
         self.hover(pos);
         for _ in 0..clicks.max(1) {
             self.pending.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers });
@@ -136,10 +140,14 @@ impl Headless {
             self.pending.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers });
             self.frame();
         }
+        // Panels drawn before the one that handled the click show its effect a frame later.
+        self.frame();
     }
 
     /// Clicks the centre of an automation element.
     pub fn click(&mut self, id: &str, clicks: usize, modifiers: Modifiers) -> Result<(), String> {
+        // Layouts (grids, panels that just opened) settle over a frame or two.
+        self.frames(2);
         let pos = self.app.automation.center(id).ok_or_else(|| format!("no UI element `{id}`"))?;
         self.click_at(pos, clicks, modifiers);
         Ok(())
@@ -147,6 +155,7 @@ impl Headless {
 
     /// A primary-button drag from `from` to `to` in `steps` moves.
     pub fn drag_at(&mut self, from: Pos2, to: Pos2, button: PointerButton, modifiers: Modifiers) {
+        self.time += 0.5;
         self.hover(from);
         self.pending.push(Event::PointerButton { pos: from, button, pressed: true, modifiers });
         self.frame();
@@ -158,11 +167,13 @@ impl Headless {
         }
         self.pending.push(Event::PointerButton { pos: to, button, pressed: false, modifiers });
         self.frame();
+        self.frame();
         self.pointer = to;
     }
 
     /// Drags from one automation element's centre to another's.
     pub fn drag(&mut self, from: &str, to: &str) -> Result<(), String> {
+        self.frames(2);
         let a = self.app.automation.center(from).ok_or_else(|| format!("no UI element `{from}`"))?;
         let b = self.app.automation.center(to).ok_or_else(|| format!("no UI element `{to}`"))?;
         self.drag_at(a, b, PointerButton::Primary, Modifiers::NONE);
@@ -174,6 +185,7 @@ impl Headless {
         self.pending.push(Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers });
         self.frame();
         self.pending.push(Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers });
+        self.frame();
         self.frame();
     }
 

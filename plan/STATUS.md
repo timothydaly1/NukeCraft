@@ -12,6 +12,11 @@
 
 ## Recently done
 
+- M1.4: Properties panel: a widget per knob kind, drags as one undo step, key buttons (set/delete
+  at the current frame; right-click: No Animation, Set to Default), rename, disable, file browsing,
+  Render button on Write. Headless harness: gestures are separated in time and id lookups wait for
+  layout to settle.
+
 - M1.2: Node Graph: category colours, pipes with input labels, pan/zoom/frame, select, box
   select, drag to move (one undo step), drag pipes to connect/reconnect/disconnect, Tab search,
   node keys that insert (Shift: branch) and make room, 1 to view, Backspace/Delete, context menu.

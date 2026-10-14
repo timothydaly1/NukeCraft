@@ -228,3 +228,15 @@ pub fn pick_save(default_name: &str, extensions: &[&str]) -> Option<String> {
         None
     }
 }
+
+/// A file to read, from the platform file picker (Read nodes).
+pub fn pick_image() -> Option<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rfd::FileDialog::new().add_filter("image", &["exr", "png"]).pick_file().map(|p| p.display().to_string())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
