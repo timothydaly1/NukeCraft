@@ -5,7 +5,7 @@ use nukecraft_color::MergeOp;
 use nukecraft_geom::IRect;
 use nukecraft_raster::{Channel, ChannelSet, Image};
 
-use crate::{Ctx, ImageInfo, Input, InputSpec, KnobDefault, KnobKind, KnobSpec, NodeSpec, Result, input_image, input_info, request_same};
+use crate::{Ctx, ImageInfo, Input, InputSpec, KnobDefault, KnobKind, KnobSpec, NodeSpec, Result, input_image, input_info, mask_factors, request_same};
 
 const OPERATIONS: &[&str] = &[
     "atop",
@@ -82,6 +82,7 @@ pub fn specs() -> Vec<NodeSpec> {
                 default: KnobDefault::Text("rgba.alpha"),
                 help: "Channel of the mask input that limits the merge.",
             },
+            crate::color_nodes::INVERT_MASK,
             KnobSpec { name: "mix", label: "mix", kind: KnobKind::Float, default: KnobDefault::Number(1.0), help: "Blend between B (0) and the result (1)." },
         ],
         info: merge_info,
@@ -108,10 +109,7 @@ fn merge_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], region: I
     let empty = Image::new(IRect::EMPTY, ChannelSet::rgba())?;
     let a_img = input_image(inputs, A).map_or(&empty, |i| &i.image);
     let b_img = input_image(inputs, B).map_or(&empty, |i| &i.image);
-    let mask = input_image(inputs, MASK).and_then(|m| {
-        let chan = ctx.channels_knob("maskChannelInput", m.image.channels());
-        chan.iter().next().and_then(|c| m.image.channels().index_of(c)).map(|i| (&m.image, i))
-    });
+    let mask = mask_factors(ctx, inputs, MASK, region);
     let output = ctx.channels_knob("output", &info.channels);
     let m = ctx.knobs.float("mix") as f32;
 
@@ -128,7 +126,8 @@ fn merge_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], region: I
                     let ca = ai.map_or(0.0, |i| a_img.get_at(i, x, y));
                     let a = aa.map_or(0.0, |i| a_img.get_at(i, x, y));
                     let b = ba.map_or(0.0, |i| b_img.get_at(i, x, y));
-                    let k = mask.map_or(1.0, |(img, i)| img.get_at(i, x, y)) * m;
+                    let at = (y - region.y0) as usize * region.width() as usize + (x - region.x0) as usize;
+                    let k = mask.as_ref().map_or(1.0, |mk| mk.get(at).copied().unwrap_or(0.0)) * m;
                     crate::mix(cb, op.apply(ca, cb, a, b), k)
                 } else {
                     cb

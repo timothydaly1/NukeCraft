@@ -1,7 +1,7 @@
 //! The Node Graph panel: nodes and pipes, drawn and edited the way Nuke's DAG works.
 //!
 //! - Pipes run from a node's output (its bottom edge) to an input of another node; input 0 enters
-//!   from the top, input 1 from the left, input 2 from the right (Merge: B, A, mask).
+//!   from the top, input 1 from the left, mask inputs from the right (Merge: B, A, mask).
 //! - Drag a node to move it (with the rest of the selection); drag from a node's bottom edge to
 //!   another node to connect; drag an input's arrow to reconnect it, or into empty space to
 //!   disconnect; drag on empty space to box-select; middle-drag or Alt-drag pans; scroll zooms.
@@ -92,8 +92,17 @@ impl View {
     }
 }
 
+/// Whether input `i` of a node is a mask input.
+fn is_mask(app: &NukecraftApp, n: &Node, i: usize) -> bool {
+    app.session.registry.get(&n.class).and_then(|s| s.inputs.get(i)).is_some_and(|s| s.mask)
+}
+
 /// Where input `i` meets the node, and the direction a pipe leaves it in (towards its source).
-fn input_anchor(rect: Rect, i: usize) -> (Pos2, Vec2) {
+/// Mask inputs come in from the right, as in Nuke.
+fn input_anchor(rect: Rect, i: usize, mask: bool) -> (Pos2, Vec2) {
+    if mask {
+        return (rect.right_center(), Vec2::new(1.0, 0.0));
+    }
     match i {
         0 => (rect.center_top(), Vec2::new(0.0, -1.0)),
         1 => (rect.left_center(), Vec2::new(-1.0, 0.0)),
@@ -123,7 +132,7 @@ fn input_label(app: &NukecraftApp, n: &Node, i: usize) -> String {
 /// The grab handle of input `i`: on the pipe (or stub), `STUB` units out from the node.
 fn input_handle(view: View, app: &NukecraftApp, n: &Node, i: usize) -> Pos2 {
     let rect = view.node_rect(n);
-    let (anchor, dir) = input_anchor(rect, i);
+    let (anchor, dir) = input_anchor(rect, i, is_mask(app, n, i));
     let dir = match n.input(i).and_then(|u| app.session.script.node(u)) {
         Some(up) => {
             let from = view.node_rect(up).center_bottom();
@@ -544,11 +553,10 @@ fn draw_pipes(app: &NukecraftApp, painter: &egui::Painter, view: View) {
     for n in script.nodes() {
         let rect = view.node_rect(n);
         let slots = shown_inputs(app, n);
-        let mask_of = |i: usize| app.session.registry.get(&n.class).and_then(|s| s.inputs.get(i)).is_some_and(|s| s.mask);
         for i in 0..slots {
-            let (anchor, _) = input_anchor(rect, i);
+            let (anchor, _) = input_anchor(rect, i, is_mask(app, n, i));
             let label = if slots > 1 { Some(input_label(app, n, i)) } else { None };
-            let color = if mask_of(i) { theme::PIPE_MASK } else { theme::PIPE };
+            let color = if is_mask(app, n, i) { theme::PIPE_MASK } else { theme::PIPE };
             match n.input(i).and_then(|u| script.node(u)) {
                 Some(up) => pipe(painter, view.node_rect(up).center_bottom(), anchor, color, 1.6, label.as_deref(), view.zoom),
                 None => {
@@ -633,7 +641,7 @@ fn draw_drag(app: &NukecraftApp, painter: &egui::Painter, view: View) {
         Some(Drag::Pipe { from, to }) => {
             let start = match from {
                 PipeEnd::Output(id) => app.session.script.node(*id).map(|n| view.node_rect(n).center_bottom()),
-                PipeEnd::Input(id, i) => app.session.script.node(*id).map(|n| input_anchor(view.node_rect(n), *i).0),
+                PipeEnd::Input(id, i) => app.session.script.node(*id).map(|n| input_anchor(view.node_rect(n), *i, is_mask(app, n, *i)).0),
             };
             if let Some(s) = start {
                 let (a, b) = match from {

@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F12); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F15); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -64,6 +64,8 @@ pub fn cases() -> Vec<Case> {
     blur(&mut out);
     animation(&mut out);
     grade(&mut out);
+    color_math(&mut out);
+    masks(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -223,6 +225,152 @@ fn grade(out: &mut Vec<Case>) {
             vec![sample("S", vec![(5, 5)], &RGBA)],
         ));
     }
+}
+
+/// A node with knobs from a JSON object.
+fn with_knobs(mut n: NodeDef, knobs: Value) -> NodeDef {
+    if let Value::Object(m) = knobs {
+        for (k, v) in m {
+            n = n.knob(&k, v);
+        }
+    }
+    n
+}
+
+/// A horizontal Ramp from black at x = 0 to `color` at x = 64.
+fn hramp(name: &str, color: [f64; 4]) -> NodeDef {
+    NodeDef::new(name, "Ramp").knob("p0", json!([0, 0])).knob("p1", json!([64, 0])).knob("color", json!(color)).knob("type", json!("linear"))
+}
+
+/// Every fourth pixel along row 5.
+fn row() -> Vec<(i32, i32)> {
+    (0..W as i32).step_by(4).map(|x| (x, 5)).collect()
+}
+
+/// F15: the math nodes; F13: ColorCorrect.
+fn color_math(out: &mut Vec<Case>) {
+    let src = [-0.25, 0.4, 1.5, 0.7];
+    for (id, class, knobs, ours) in [
+        ("clamp.default", "Clamp", json!({}), true),
+        ("clamp.range", "Clamp", json!({ "minimum": 0.1, "maximum": [0.3, 0.35, 1.2, 0.5] }), true),
+        ("clamp.clamp_to", "Clamp", json!({ "MinClampTo_enable": true, "MinClampTo": 0.5, "MaxClampTo_enable": true, "MaxClampTo": 0.25 }), true),
+        ("clamp.no_minimum", "Clamp", json!({ "minimum_enable": false }), true),
+        ("invert.default", "Invert", json!({}), true),
+        ("invert.rgba", "Invert", json!({ "channels": "rgba" }), true),
+        ("multiply", "Multiply", json!({ "value": [2, 0.5, 3, 4] }), true),
+        ("add", "Add", json!({ "value": [0.1, -0.2, 0.3, 0.4] }), true),
+        ("gamma", "Gamma", json!({ "value": [2.2, 0.5, 1.8, 1] }), true),
+        ("gamma.zero", "Gamma", json!({ "value": 0 }), true),
+        ("exposure.stops", "EXPTool", json!({ "mode": "Stops", "red": 1, "green": -1.5, "blue": 0.25 }), true),
+        ("exposure.densities", "EXPTool", json!({ "mode": "Densities", "red": 0.3, "green": -0.2, "blue": 0.1 }), false),
+        ("exposure.cineon", "EXPTool", json!({ "mode": "Cineon", "red": 30, "green": -20, "blue": 10 }), false),
+    ] {
+        let mut c = case(
+            id,
+            "F15",
+            "A Constant (-0.25, 0.4, 1.5, 0.7) through a colour math node",
+            vec![constant("C", src), with_knobs(NodeDef::new("N", class).input(0, "C"), knobs)],
+            vec![sample("N", vec![(5, 5)], &RGBA)],
+        );
+        c.nukecraft = ours;
+        out.push(c);
+    }
+    // ColorCorrect over a ramp of colours from black to (1.6, 1.2, 0.6): every range is crossed.
+    for (id, knobs) in [
+        ("saturation", json!({ "saturation": 0.3 })),
+        ("contrast", json!({ "contrast": 1.6 })),
+        ("gamma", json!({ "gamma": 1.8 })),
+        ("gain_offset", json!({ "gain": [1.2, 0.9, 1.1, 1], "offset": 0.05 })),
+        ("shadows", json!({ "shadows.gain": 2, "shadows.offset": 0.02 })),
+        ("midtones", json!({ "midtones.gamma": 1.5, "midtones.saturation": 0.5 })),
+        ("highlights", json!({ "highlights.gain": 0.5, "highlights.contrast": 1.3 })),
+        ("master_and_range", json!({ "gain": 1.5, "midtones.gain": 0.5, "contrast": 1.2, "midtones.contrast": 1.5 })),
+    ] {
+        out.push(case(
+            &format!("colorcorrect.{id}"),
+            "F13",
+            "A ramp from black to (1.6, 1.2, 0.6) through ColorCorrect",
+            vec![hramp("R", [1.6, 1.2, 0.6, 1.0]), with_knobs(NodeDef::new("CC", "ColorCorrect").input(0, "R"), knobs)],
+            vec![sample("CC", row(), &RGBA)],
+        ));
+    }
+    for mode in ["Ccir 601", "Average", "Maximum"] {
+        out.push(case(
+            &format!("saturation.{}", mode.to_lowercase().replace(' ', "_")),
+            "F7",
+            "A Constant (0.8, 0.3, 0.1) through Saturation 0.25 with another luminance formula",
+            vec![constant("C", [0.8, 0.3, 0.1, 1.0]), NodeDef::new("S", "Saturation").input(0, "C").knob("saturation", json!(0.25)).knob("mode", json!(mode))],
+            vec![sample("S", vec![(5, 5)], &RGBA)],
+        ));
+    }
+}
+
+/// F14: masks and unpremult on colour nodes and Merge.
+fn masks(out: &mut Vec<Case>) {
+    let src = constant("C", [0.5, 0.25, 0.1, 0.5]);
+    let mask = || hramp("M", [1.0, 1.0, 1.0, 1.0]);
+    out.push(case(
+        "mask.grade",
+        "F14",
+        "Grade (gain 2) through an alpha ramp on its mask input",
+        vec![src.clone(), mask(), NodeDef::new("G", "Grade").input(0, "C").input(1, "M").knob("white", json!(2)).knob("maskChannelInput", json!("rgba.alpha"))],
+        vec![sample("G", row(), &RGBA)],
+    ));
+    out.push(case(
+        "mask.grade_inverted",
+        "F14",
+        "Grade (gain 2) through an inverted alpha ramp, mix 0.5",
+        vec![
+            src.clone(),
+            mask(),
+            NodeDef::new("G", "Grade")
+                .input(0, "C")
+                .input(1, "M")
+                .knob("white", json!(2))
+                .knob("maskChannelInput", json!("rgba.alpha"))
+                .knob("invert_mask", json!(true))
+                .knob("mix", json!(0.5)),
+        ],
+        vec![sample("G", row(), &RGBA)],
+    ));
+    out.push(case(
+        "mask.merge_inverted",
+        "F14",
+        "Merge plus through an inverted alpha ramp",
+        vec![
+            src.clone(),
+            constant("A", [0.2, 0.2, 0.2, 0.2]),
+            mask(),
+            NodeDef::new("Mg", "Merge2")
+                .input(0, "C")
+                .input(1, "A")
+                .input(2, "M")
+                .knob("operation", json!("plus"))
+                .knob("maskChannelInput", json!("rgba.alpha"))
+                .knob("invert_mask", json!(true)),
+        ],
+        vec![sample("Mg", row(), &RGBA)],
+    ));
+    for (id, class, knobs) in [
+        ("unpremult.grade", "Grade", json!({ "add": 0.1, "white": 1.5, "unpremult": "rgba.alpha" })),
+        ("unpremult.grade_rgba", "Grade", json!({ "channels": "rgba", "add": 0.1, "unpremult": "rgba.alpha" })),
+        ("unpremult.colorcorrect", "ColorCorrect", json!({ "saturation": 0.5, "gamma": 1.4, "unpremult": "rgba.alpha" })),
+    ] {
+        out.push(case(
+            id,
+            "F14",
+            "A Constant (0.5, 0.25, 0.1, 0.5) through a colour node with unpremult by alpha",
+            vec![src.clone(), with_knobs(NodeDef::new("N", class).input(0, "C"), knobs)],
+            vec![sample("N", vec![(5, 5)], &RGBA)],
+        ));
+    }
+    out.push(case(
+        "unpremult.zero_alpha",
+        "F14",
+        "Grade (add 0.1) with unpremult by a zero alpha",
+        vec![constant("Z", [0.3, 0.2, 0.1, 0.0]), NodeDef::new("G", "Grade").input(0, "Z").knob("add", json!(0.1)).knob("unpremult", json!("rgba.alpha"))],
+        vec![sample("G", vec![(5, 5)], &RGBA)],
+    ));
 }
 
 /// F8: every Merge operation, in range and out of range.

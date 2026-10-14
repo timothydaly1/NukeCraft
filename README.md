@@ -47,9 +47,10 @@ What works today:
   box select, 1 to view), a Viewer rendering on its own thread (channels, exposure, gamma, pixel
   readout, timeline and playback), a Properties panel (every knob kind, keys, one undo step per
   drag), menus built from the command registry, undo/redo, autosave.
-- **15 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Grade, Saturation, Premult,
-  Unpremult, Merge (29 operations, mask input), Transform (six cubic filters + impulse, black outside),
-  Blur (four kernels), Crop, Switch, Dot.
+- **22 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Grade, ColorCorrect, Saturation,
+  Clamp, Invert, Multiply, Add, Gamma, Exposure (all with mask, unpremult and mix), Premult, Unpremult,
+  Merge (29 operations, mask input), Transform (six cubic filters + impulse, black outside), Blur
+  (four kernels), Crop, Switch, Dot.
 - **Nuke's image model:** bbox vs format, edge repeat outside the bbox, region-of-interest rendering,
   named channels and layers.
 - **Animation:** keys on exact frame times, four interpolations, keying animated knobs.

@@ -46,10 +46,12 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Grade | ✅ | No mask input yet |
-| Saturation | ✅ | No mask input yet |
-| ColorCorrect, HueCorrect, HueShift | — | [M2] |
-| Clamp, Invert, Multiply, Add, Gamma, Exposure | — | [M2] |
+| Grade | ✅ | Mask input, unpremult, mix (as every colour node) |
+| Saturation | ✅ | Four luminance formulas |
+| ColorCorrect | ◐ | Master + shadows/midtones/highlights; fixed range curves (no `lookup` editing), contrast pivot unverified (F13) |
+| HueCorrect, HueShift | — | [M2] (needs the Curve Editor) |
+| Clamp, Invert, Multiply, Add, Gamma | ✅ | |
+| Exposure (EXPTool) | ◐ | Stops only; no Densities/Cineon (F15) |
 | ColorLookup, ColorMatrix, Colorspace, Log2Lin | — | [M5] |
 | OCIOColorSpace, OCIODisplay, OCIOFileTransform, OCIOCDLTransform | — | [M5] |
 | HSVTool, Posterize, Histogram, MinColor, Toe, Expression | — | |
@@ -78,7 +80,7 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Merge (Merge2) | ✅ | 29 operations (soft-light not yet); no A/B channel selection, also-merge, alpha masking |
+| Merge (Merge2) | ✅ | 29 operations (soft-light not yet); mask with invert; no A/B channel selection, also-merge, alpha masking |
 | Premult, Unpremult | ✅ | |
 | Switch | ✅ | |
 | Keymix, Dissolve, AddMix | — | [M2] |

@@ -14,6 +14,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod blur;
+mod color_math;
 mod color_nodes;
 pub mod filter;
 mod image_nodes;
@@ -191,6 +192,7 @@ impl Registry {
         for spec in image_nodes::specs()
             .into_iter()
             .chain(color_nodes::specs())
+            .chain(color_math::specs())
             .chain(merge::specs())
             .chain(transform::specs())
             .chain(blur::specs())
@@ -238,6 +240,26 @@ impl NodeSpec {
     pub fn max_inputs(&self) -> usize {
         if self.extra_inputs { nukecraft_graph::MAX_INPUTS } else { self.inputs.len() }
     }
+}
+
+/// The mask of a node over `region`, read from its mask input `index` through the
+/// `maskChannelInput` and `invert_mask` knobs: one factor in 0..1 per pixel (rows bottom-up).
+/// `None` means no mask: the input is unconnected or the channel is `none`. A channel the mask
+/// image lacks reads as black.
+pub fn mask_factors(ctx: &Ctx, inputs: &[Option<Input>], index: usize, region: IRect) -> Option<Vec<f32>> {
+    let m = input_image(inputs, index)?;
+    let chan = ChannelSet::parse(ctx.knobs.text("maskChannelInput"), m.image.channels()).ok()?.iter().next().cloned()?;
+    let ci = m.image.channels().index_of(&chan);
+    let invert = ctx.knobs.boolean("invert_mask");
+    let mut out = Vec::with_capacity(region.area() as usize);
+    for y in region.y0..region.y1 {
+        for x in region.x0..region.x1 {
+            let v = ci.map_or(0.0, |i| m.image.get_at(i, x, y));
+            let v = if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) };
+            out.push(if invert { 1.0 - v } else { v });
+        }
+    }
+    Some(out)
 }
 
 /// `mix` blend of an original and a processed value.
@@ -325,6 +347,7 @@ mod tests {
         let r = Registry::builtin();
         let n = image_nodes::specs().len()
             + color_nodes::specs().len()
+            + color_math::specs().len()
             + merge::specs().len()
             + transform::specs().len()
             + blur::specs().len()
