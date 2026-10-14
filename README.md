@@ -46,14 +46,14 @@ What works today:
 - **The desktop app:** a Node Graph (Tab search, B/G/M/T/K/./R/W to insert nodes, drag to connect,
   box select, 1 to view), a Viewer rendering on its own thread (channels, exposure, gamma, pixel
   readout, timeline and playback, on-viewer handles), a Properties panel (every knob kind, keys,
-  one undo step per drag), a Curve Editor, background rendering with progress, menus built from
-  the command registry, undo/redo, autosave.
-- **43 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Rectangle, Radial, Grade,
+  one undo step per drag), a Curve Editor, Backdrops and StickyNotes, copy/paste, background
+  rendering with progress, menus built from the command registry, undo/redo, autosave.
+- **45 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Rectangle, Radial, Grade,
   ColorCorrect, Saturation, Clamp, Invert, Multiply, Add, Gamma, Exposure (all with mask, unpremult
   and mix), Shuffle, Copy, ChannelMerge, Remove, Premult, Unpremult, Merge (29 operations, mask
   input), Keymix, Dissolve, Transform (six cubic filters + impulse, black outside), Reformat,
   Mirror, Position, CornerPin, FrameHold, TimeOffset, FrameRange, Blur (four kernels), Sharpen,
-  Erode (fast and filter), Glow, Median, Crop, Switch, Dot, NoOp.
+  Erode (fast and filter), Glow, Median, Crop, Switch, Dot, NoOp, Backdrop, StickyNote.
 - **Nuke's image model:** bbox vs format, edge repeat outside the bbox, region-of-interest rendering,
   named channels and layers.
 - **Animation:** keys on exact frame times, four interpolations, keying animated knobs.

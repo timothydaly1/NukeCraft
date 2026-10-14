@@ -24,7 +24,7 @@ impl eframe::App for Shell {
 
     /// Input from the control channel joins the window's own.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        raw_input.events.extend(self.0.take_injected());
+        self.0.feed_input(raw_input);
     }
 }
 

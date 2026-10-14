@@ -116,6 +116,18 @@ impl NukecraftApp {
         if self.injected.is_empty() { Vec::new() } else { self.injected.remove(0) }
     }
 
+    /// Adds the control channel's queued input to a frame's raw input.
+    pub fn feed_input(&mut self, raw: &mut egui::RawInput) {
+        let events = self.take_injected();
+        let events = self.held.apply(events);
+        raw.events.extend(events);
+    }
+
+    /// Synthetic input (the headless harness) with the modifier state a keyboard would report.
+    pub fn track_modifiers(&mut self, events: Vec<Event>) -> Vec<Event> {
+        self.held.apply(events)
+    }
+
     /// Handles control requests that arrived since the last frame.
     pub(crate) fn handle_control(&mut self, ctx: &egui::Context) {
         let Some(server) = &self.control else { return };
@@ -255,5 +267,38 @@ impl NukecraftApp {
             };
             let _ = reply.send(result.unwrap_or_else(|e| json!({ "id": Value::Null, "error": e.to_string() })));
         }
+    }
+}
+
+/// The modifiers synthetic input holds. egui reads held modifiers from `ModifiersChanged`
+/// events: a Shift-click is preceded by "Shift held", which lasts until the frame after its
+/// release (so the click itself still sees Shift).
+#[derive(Default)]
+pub struct HeldModifiers {
+    held: Modifiers,
+    clear_next: bool,
+}
+
+impl HeldModifiers {
+    pub fn apply(&mut self, events: Vec<Event>) -> Vec<Event> {
+        let mut out = Vec::with_capacity(events.len() + 2);
+        if self.clear_next {
+            out.push(Event::ModifiersChanged(Modifiers::NONE));
+            self.held = Modifiers::NONE;
+            self.clear_next = false;
+        }
+        for e in events {
+            if let Event::PointerButton { modifiers, pressed, .. } | Event::Key { modifiers, pressed, .. } = &e {
+                if *modifiers != self.held {
+                    out.push(Event::ModifiersChanged(*modifiers));
+                    self.held = *modifiers;
+                }
+                if !*pressed && !modifiers.is_none() {
+                    self.clear_next = true;
+                }
+            }
+            out.push(e);
+        }
+        out
     }
 }

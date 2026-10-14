@@ -6,10 +6,10 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** the rest of M2: Backdrop and StickyNote, copy/paste of nodes, Group (with Input
-  and Output), CheckerBoard's colours and lines, ColorBars, then Roto; the other G1 follow-ups in
+- **Next task:** the rest of M2: CheckerBoard's colours and lines and ColorBars (M2.11), Group with
+  Input and Output (M2.12), then Roto (M2.13); the other G1 follow-ups in
   `docs/gaps.md`. When the oracle arrives, fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (158 tests, including headless UI and fidelity tests).
+- **Gate:** `cargo xtask ci` green (162 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -18,6 +18,9 @@
 
 ## Recently done
 
+- M2.10: Backdrop (BackdropNode) and StickyNote in the Node Graph (a backdrop carries its nodes,
+  resizes, wraps the selection); copy, cut and paste (`edit.copy`/`cut`/`paste`, the system
+  clipboard); a label field on every node; synthetic Shift/Cmd clicks hold their modifiers.
 - M2.9: the Curve Editor (a tab beside the Node Graph): curves of open nodes' animated knob
   components, select/box-select/move keys (whole frames), interpolation, delete, fit; engine
   commands `node.editKeys` and `node.setInterpolation`.

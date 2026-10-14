@@ -36,7 +36,7 @@ Every interactive element registers a stable id each frame. The main families:
 |---|---|
 | `menu.<Menu>`, `menu.<Menu>.<command id>`, `menu.Nodes.<Class>` | Menus and their items |
 | `graph.canvas` | The Node Graph |
-| `graph.node.<Name>`, `.output`, `.input.<i>` | A node, its output, the grab handle of input `i` |
+| `graph.node.<Name>`, `.output`, `.input.<i>` | A node, its output, the grab handle of input `i` (a Backdrop: its title bar, and `.resize`) |
 | `graph.search`, `graph.search.item.<Class>` | The Tab search field and its results |
 | `viewer.image`, `viewer.channel`, `viewer.exposure`, `viewer.gamma`, `viewer.fit` | The Viewer and its toolbar |
 | `viewer.handle.<Name>.<knob>` (box knobs: `.0`..`.3` corners from the bottom-left, `.move`) | On-viewer handles of nodes whose properties are open; drag them with `ui.drag` |

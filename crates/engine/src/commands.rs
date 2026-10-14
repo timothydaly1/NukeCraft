@@ -107,6 +107,23 @@ static SPECS: &[CommandSpec] = &[
         undoable: false,
         journal: true,
     },
+    action(
+        "edit.copy",
+        "Copy",
+        &["Edit"],
+        Some("Cmd+C"),
+        "{nodes: [name] | node} — returns {text}: the nodes as a script fragment",
+        crate::fragment::edit_copy,
+    ),
+    edit("edit.cut", "Cut", &["Edit"], Some("Cmd+X"), "{nodes: [name] | node} — copies, then deletes; returns {text}", crate::fragment::edit_cut),
+    edit(
+        "edit.paste",
+        "Paste",
+        &["Edit"],
+        Some("Cmd+V"),
+        "{text: fragment from edit.copy, x?, y?} — renames taken names, keeps pipes (to outside nodes by name); returns {names}",
+        crate::fragment::edit_paste,
+    ),
     edit(
         "node.delete",
         "Delete",
@@ -286,7 +303,7 @@ fn edit_redo(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({ "redone": label }))
 }
 
-fn node_delete(s: &mut Session, p: &Value) -> Result<Value> {
+pub(crate) fn node_delete(s: &mut Session, p: &Value) -> Result<Value> {
     let ids = params::nodes(&s.script, p)?;
     let reconnect = params::opt_bool(p, "reconnect")?.unwrap_or(true);
     let doomed: HashSet<NodeId> = ids.iter().copied().collect();

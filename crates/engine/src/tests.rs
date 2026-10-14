@@ -252,3 +252,53 @@ fn keys_are_edited_one_component_at_a_time() {
     let n = s.script.by_name("Grade1").unwrap();
     assert_eq!(n.knobs.get("white").unwrap().components().unwrap().len(), 3);
 }
+
+#[test]
+fn copy_and_paste_nodes() {
+    let mut s = demo_session().unwrap();
+    let text = exec(&mut s, "edit.copy", json!({ "nodes": ["Grade1", "Blur1"] }))["text"].as_str().unwrap().to_string();
+    let before = s.script.nodes().len();
+    let r = exec(&mut s, "edit.paste", json!({ "text": text }));
+    assert_eq!(r["names"], json!(["Grade2", "Blur2"]), "taken names are renumbered");
+    assert_eq!(s.script.nodes().len(), before + 2);
+    let input = |s: &crate::Session, n: &str| s.script.by_name(n).and_then(|n| n.input(0)).and_then(|i| s.script.name_of(i).ok().map(str::to_string));
+    assert_eq!(input(&s, "Blur2").as_deref(), Some("Grade2"), "the pipe between pasted nodes");
+    assert_eq!(input(&s, "Grade2").as_deref(), Some("Merge2"), "the pipe from outside, by name");
+    let (g1, g2) = (s.script.by_name("Grade1").unwrap(), s.script.by_name("Grade2").unwrap());
+    assert_eq!(g1.knobs, g2.knobs);
+    assert_eq!((g2.x - g1.x, g2.y - g1.y), (40.0, 40.0));
+    exec(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.script.nodes().len(), before, "one undo step");
+    // Positioned paste, then cut.
+    exec(&mut s, "edit.paste", json!({ "text": text, "x": 1000, "y": 500 }));
+    let g = s.script.by_name("Grade2").unwrap();
+    assert_eq!((g.x, g.y), (1000.0, 500.0));
+    let cut = exec(&mut s, "edit.cut", json!({ "nodes": ["Grade2", "Blur2"] }));
+    assert!(cut["text"].as_str().unwrap().contains("Grade2"));
+    assert!(s.script.by_name("Grade2").is_none());
+    // Into an empty script: no outside pipes, original names.
+    let mut empty = crate::Session::new();
+    exec(&mut empty, "edit.paste", json!({ "text": text }));
+    assert_eq!(input(&empty, "Grade1"), None);
+    assert_eq!(input(&empty, "Blur1").as_deref(), Some("Grade1"));
+    // Garbage and hostile fragments are errors that change nothing.
+    let snapshot = empty.script.clone();
+    for bad in [
+        json!({ "text": "not json" }),
+        json!({ "text": "{\"nodes\": []}" }),
+        json!({ "text": "{\"nukecraft\": \"fragment\", \"nodes\": [{\"class\": \"NoSuchClass\"}]}" }),
+        json!({ "text": "{\"nukecraft\": \"fragment\", \"nodes\": [{\"class\": \"Blur\", \"knobs\": 5}]}" }),
+        json!({ "text": 3 }),
+    ] {
+        assert!(empty.execute("edit.paste", &bad).is_err(), "{bad}");
+    }
+    assert_eq!(empty.script, snapshot);
+    // Unknown knobs and ill-typed values are dropped, not fatal.
+    exec(
+        &mut empty,
+        "edit.paste",
+        json!({ "text": "{\"nukecraft\": \"fragment\", \"nodes\": [{\"class\": \"Blur\", \"name\": \"B\", \"knobs\": {\"size\": \"big\", \"nope\": 1, \"filter\": \"box\"}}]}" }),
+    );
+    let b = empty.script.by_name("B").unwrap();
+    assert_eq!(b.knobs.len(), 1, "{:?}", b.knobs);
+}

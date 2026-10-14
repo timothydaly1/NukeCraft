@@ -485,6 +485,92 @@ mod curves {
     }
 }
 
+mod annotations {
+    use super::*;
+    use egui::{Event, Key, PointerButton};
+    use serde_json::json;
+
+    fn pos(h: &Headless, node: &str) -> (f64, f64) {
+        let n = h.app.session.script.by_name(node).unwrap();
+        (n.x, n.y)
+    }
+
+    #[test]
+    fn a_backdrop_wraps_the_selection_and_carries_its_nodes() {
+        let mut h = demo();
+        h.click("graph.node.Grade1", 1, Modifiers::NONE).unwrap();
+        h.click("graph.node.Blur1", 1, Modifiers::SHIFT).unwrap();
+        h.app.create_node("BackdropNode", false);
+        h.frames(2);
+        let bd = h.app.session.script.by_name("Backdrop1").expect("a backdrop");
+        let (g, b) = (pos(&h, "Grade1"), pos(&h, "Blur1"));
+        assert!(bd.x < g.0 && bd.y < g.1 && bd.x < b.0, "it lies behind the nodes: {:?} {:?} {:?} {:?}", (bd.x, bd.y), g, b, h.app.selected_names());
+        assert!(bd.knobs.contains_key("bdwidth"));
+        // Drag its title bar: the nodes on it move along, in one undo step.
+        h.app.session.clear_history();
+        // The title bar's left end (Merge2 sits over the middle of it in the demo).
+        let bar = h.app.automation.find("graph.node.Backdrop1").unwrap().rect;
+        let title = bar.left_center() + egui::vec2(8.0, 0.0);
+        h.drag_at(title, title + egui::vec2(60.0, 0.0), PointerButton::Primary, Modifiers::NONE);
+        let (g2, b2) = (pos(&h, "Grade1"), pos(&h, "Blur1"));
+        assert!(
+            g2.0 > g.0 + 20.0 && (b2.0 - b.0 - (g2.0 - g.0)).abs() < 1e-6,
+            "{g:?} -> {g2:?}; backdrop {:?}; history {:?}; title {title:?}",
+            pos(&h, "Backdrop1"),
+            h.app.session.history()
+        );
+        assert_eq!(pos(&h, "Write1").0, pos(&h, "Merge2").0, "nodes off the backdrop stay");
+        assert_eq!(h.app.session.history().len(), 1);
+        // Resize from the corner.
+        let w0 = h.app.session.script.by_name("Backdrop1").unwrap().knobs["bdwidth"].clone();
+        let corner = h.app.automation.center("graph.node.Backdrop1.resize").unwrap();
+        h.drag_at(corner, corner + egui::vec2(50.0, 30.0), PointerButton::Primary, Modifiers::NONE);
+        assert_ne!(h.app.session.script.by_name("Backdrop1").unwrap().knobs["bdwidth"], w0);
+        assert_eq!(h.app.session.history().len(), 2, "the resize is one step");
+        // A box drawn inside the backdrop selects nodes, not the backdrop.
+        let gr = h.app.automation.center("graph.node.Grade1").unwrap();
+        h.drag_at(gr + egui::vec2(-60.0, -8.0), gr + egui::vec2(60.0, 8.0), PointerButton::Primary, Modifiers::NONE);
+        assert_eq!(h.app.selected_names(), ["Grade1"]);
+    }
+
+    #[test]
+    fn sticky_notes_show_their_label() {
+        let mut h = demo();
+        h.app.selection.clear();
+        h.app.session.execute("node.create", &json!({ "class": "StickyNote", "x": 500, "y": 0 })).unwrap();
+        h.app.session.execute("node.label", &json!({ "node": "StickyNote1", "label": "fix the edges\nbefore Friday" })).unwrap();
+        h.frames(2);
+        let r = h.app.automation.find("graph.node.StickyNote1").expect("drawn").rect;
+        assert!(r.height() > 30.0, "two lines tall: {r:?}");
+        assert!(h.app.automation.find("graph.node.StickyNote1.output").is_none(), "no pipes");
+    }
+
+    #[test]
+    fn copy_paste_and_cut_with_keys_and_clipboard_events() {
+        let mut h = demo();
+        h.click("graph.node.Grade1", 1, Modifiers::NONE).unwrap();
+        h.hover(h.app.automation.center("graph.canvas").unwrap());
+        h.key(Key::C, Modifiers::COMMAND);
+        h.key(Key::V, Modifiers::COMMAND);
+        assert!(h.app.session.script.by_name("Grade2").is_some(), "pasted");
+        assert_eq!(h.app.selected_names(), ["Grade2"], "the pasted node is selected");
+        // The system clipboard's paste event (what Cmd+V becomes in the real window).
+        let text = h.app.session.execute("edit.copy", &json!({ "nodes": ["Blur1"] })).unwrap()["text"].as_str().unwrap().to_string();
+        h.event(Event::Paste(text));
+        assert!(h.app.session.script.by_name("Blur2").is_some());
+        // Cut removes and keeps a copy to paste back.
+        h.event(Event::Cut);
+        assert!(h.app.session.script.by_name("Blur2").is_none());
+        h.click("menu.Edit", 1, Modifiers::NONE).unwrap();
+        h.click("menu.Edit.edit.paste", 1, Modifiers::NONE).unwrap();
+        assert!(h.app.session.script.by_name("Blur2").is_some(), "Edit > Paste uses the last copy");
+        // Pasting text that isn't nodes does nothing harmful.
+        let n = h.app.session.script.nodes().len();
+        h.event(Event::Paste("hello".into()));
+        assert_eq!(h.app.session.script.nodes().len(), n + 1, "falls back to the last copy");
+    }
+}
+
 mod control {
     use super::*;
     use serde_json::{Value, json};

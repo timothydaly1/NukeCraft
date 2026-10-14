@@ -74,8 +74,9 @@ impl Headless {
         if let Some(vp) = input.viewports.get_mut(&input.viewport_id) {
             vp.native_pixels_per_point = Some(self.pixels_per_point);
         }
-        input.events = std::mem::take(&mut self.pending);
-        input.events.extend(self.app.take_injected());
+        let mut events = std::mem::take(&mut self.pending);
+        events.extend(self.app.take_injected());
+        input.events = self.app.track_modifiers(events);
         let app = &mut self.app;
         let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
         self.time += 1.0 / 60.0;
@@ -197,6 +198,12 @@ impl Headless {
     }
 
     /// Scrolls (mouse wheel, in points) at the current pointer position.
+    /// Sends any input event (Copy, Cut, Paste…) and runs a frame.
+    pub fn event(&mut self, event: Event) {
+        self.pending.push(event);
+        self.frame();
+    }
+
     pub fn scroll(&mut self, delta: Vec2) {
         self.pending.push(Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, phase: egui::TouchPhase::Move, modifiers: Modifiers::NONE });
         self.frame();

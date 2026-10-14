@@ -1,4 +1,4 @@
-//! Transform ▸ Crop, Other ▸ Dot, Merge ▸ Switch.
+//! Transform ▸ Crop, Other ▸ Dot, Backdrop, StickyNote, Merge ▸ Switch.
 
 use nukecraft_geom::{Format, IRect};
 use nukecraft_raster::Image;
@@ -8,8 +8,64 @@ use crate::{
     request_same,
 };
 
+/// Node Graph annotations: no inputs, no image (black if viewed).
+fn annotation_info(ctx: &Ctx, _: &[Option<ImageInfo>]) -> Result<ImageInfo> {
+    Ok(ImageInfo::black(ctx.root))
+}
+
+fn annotation_engine(_: &Ctx, info: &ImageInfo, _: &[Option<Input>], _: IRect) -> Result<Image> {
+    Ok(Image::new(IRect::EMPTY, info.channels.clone())?)
+}
+
+const fn knob(name: &'static str, label: &'static str, kind: KnobKind, default: KnobDefault, help: &'static str) -> KnobSpec {
+    KnobSpec { name, label, kind, default, help }
+}
+
+const BACKDROP_KNOBS: &[KnobSpec] = &[
+    knob("tile_color", "color", KnobKind::Color, KnobDefault::Numbers(&[0.33, 0.33, 0.38]), "The backdrop's colour in the Node Graph."),
+    knob("note_font_size", "font size", KnobKind::Int, KnobDefault::Number(42.0), "Size of the label's text."),
+    knob("bdwidth", "width", KnobKind::Float, KnobDefault::Number(300.0), "Width in the Node Graph."),
+    knob("bdheight", "height", KnobKind::Float, KnobDefault::Number(200.0), "Height in the Node Graph."),
+    knob("z_order", "z order", KnobKind::Int, KnobDefault::Number(0.0), "Backdrops with a higher z order draw over others."),
+];
+
+const STICKY_KNOBS: &[KnobSpec] = &[
+    knob("tile_color", "color", KnobKind::Color, KnobDefault::Numbers(&[0.95, 0.88, 0.52]), "The note's colour."),
+    knob("note_font_size", "font size", KnobKind::Int, KnobDefault::Number(22.0), "Size of the text."),
+];
+
 pub fn specs() -> Vec<NodeSpec> {
     vec![
+        NodeSpec {
+            class: "BackdropNode",
+            aliases: &["Backdrop"],
+            label: "Backdrop",
+            category: "Other",
+            shortcut: None,
+            help: "A coloured box behind nodes, titled by its label; moving it moves the nodes on it.",
+            inputs: &[],
+            extra_inputs: false,
+            knobs: BACKDROP_KNOBS,
+            info: annotation_info,
+            request: crate::request_none,
+            engine: annotation_engine,
+            input_time: None,
+        },
+        NodeSpec {
+            class: "StickyNote",
+            aliases: &[],
+            label: "StickyNote",
+            category: "Other",
+            shortcut: None,
+            help: "A note in the Node Graph: its label is the text.",
+            inputs: &[],
+            extra_inputs: false,
+            knobs: STICKY_KNOBS,
+            info: annotation_info,
+            request: crate::request_none,
+            engine: annotation_engine,
+            input_time: None,
+        },
         NodeSpec {
             class: "Crop",
             aliases: &[],

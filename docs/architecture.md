@@ -134,6 +134,11 @@ animated knob components of the nodes whose properties are open and edits them t
 `node.setInterpolation`; a key drag is one undo group. Bare-key shortcuts go to the panel under the
 pointer (Delete over the Curve Editor deletes keys, not nodes).
 
+Copy, cut and paste go through `edit.copy`, `edit.cut` and `edit.paste`: a fragment is JSON with
+inputs by name, so pasting keeps the pipes inside it and reconnects to outside nodes of the same
+name; the app puts it on the system clipboard (which arrives as Copy/Cut/Paste events, not keys)
+and keeps the last copy for Edit ▸ Paste.
+
 Render… (and a Write node's Render button) runs the same plan as the `render.execute` command
 (`nukecraft_engine::render_plan`) on a background thread from a copy of the script, frame by frame,
 with a progress window and Cancel; the window stays responsive and edits made meanwhile don't

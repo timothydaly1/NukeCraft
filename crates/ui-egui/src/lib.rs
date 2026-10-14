@@ -57,11 +57,15 @@ pub struct NukecraftApp {
     control: Option<control::ControlServer>,
     /// Input queued by the control channel, one batch per frame.
     injected: Vec<Vec<egui::Event>>,
+    /// Modifiers held by synthetic input.
+    held: control::HeldModifiers,
     /// Screenshot requests waiting for eframe: (path, request id, reply).
     screenshots: Vec<(String, Value, std::sync::mpsc::Sender<Value>)>,
     pub(crate) dialogs: dialogs::Dialogs,
     /// Render… running in the background.
     pub(crate) render_job: Option<render_job::RenderJob>,
+    /// The last nodes copied or cut (also put on the system clipboard), for Edit ▸ Paste.
+    clipboard: String,
     /// Wakes the window when background work finishes.
     repaint: Option<egui::Context>,
     status: Option<Status>,
@@ -131,9 +135,11 @@ impl NukecraftApp {
             props: properties::PropsState::default(),
             control: None,
             injected: Vec::new(),
+            held: control::HeldModifiers::default(),
             screenshots: Vec::new(),
             dialogs: dialogs::Dialogs::default(),
             render_job: None,
+            clipboard: String::new(),
             repaint: Some(ctx.clone()),
             status: None,
             shortcuts,
@@ -193,6 +199,7 @@ impl NukecraftApp {
         self.handle_control(&ctx);
         self.prune();
         self.handle_close(&ctx);
+        self.handle_clipboard(&ctx);
         self.handle_shortcuts(&ctx);
 
         egui::Panel::top("menu").show(ui, |ui| menus::menu_bar(self, ui));
@@ -291,6 +298,23 @@ impl NukecraftApp {
             }
             "root.settings" => self.dialogs.open_settings(&self.session.script.root),
             "render.execute" => self.start_render(json!({})),
+            "edit.copy" | "edit.cut" => {
+                let nodes = self.selected_names();
+                if nodes.is_empty() {
+                    self.set_status("Select nodes first", true);
+                    return;
+                }
+                if let Some(text) = self.run(id, json!({ "nodes": nodes })).and_then(|r| r["text"].as_str().map(str::to_string)) {
+                    if let Some(ctx) = &self.repaint {
+                        ctx.copy_text(text.clone());
+                    }
+                    self.clipboard = text;
+                    if id == "edit.cut" {
+                        self.selection.clear();
+                    }
+                }
+            }
+            "edit.paste" => self.paste(None),
             "render.frame" => {
                 let Some(node) = self.viewed.and_then(|v| self.session.script.name_of(v).ok()).map(str::to_string) else {
                     self.set_status("View a node first (select it and press 1)", true);
@@ -320,6 +344,9 @@ impl NukecraftApp {
     /// is selected.
     pub fn create_node_at(&mut self, class: &str, branch: bool, at: Option<(f64, f64)>) -> Option<NodeId> {
         let spec = self.session.registry.get(class)?;
+        if spec.class == "BackdropNode" && !self.selection.is_empty() {
+            return self.backdrop_around_selection();
+        }
         let (label, takes_input) = (spec.label, !spec.inputs.is_empty() || spec.extra_inputs);
         let upstream = self.selection.last().copied().filter(|_| takes_input);
         let script = &self.session.script;
@@ -367,6 +394,27 @@ impl NukecraftApp {
         if let Some(new) = created {
             self.selection = vec![new];
             self.open_properties(new);
+        }
+        created
+    }
+
+    /// A Backdrop behind the selected nodes, with room for its title (Nuke's way).
+    fn backdrop_around_selection(&mut self) -> Option<NodeId> {
+        let nodes: Vec<&nukecraft_graph::Node> = self.selection.iter().filter_map(|id| self.session.script.node(*id)).collect();
+        let x0 = nodes.iter().map(|n| n.x).fold(f64::INFINITY, f64::min);
+        let y0 = nodes.iter().map(|n| n.y).fold(f64::INFINITY, f64::min);
+        let x1 = nodes.iter().map(|n| n.x + 90.0).fold(f64::NEG_INFINITY, f64::max);
+        let y1 = nodes.iter().map(|n| n.y + 26.0).fold(f64::NEG_INFINITY, f64::max);
+        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
+            return None;
+        }
+        let (pad, title) = (20.0, 30.0);
+        let knobs = json!({ "bdwidth": (x1 - x0 + 2.0 * pad).round(), "bdheight": (y1 - y0 + 2.0 * pad + title).round() });
+        let params = json!({ "class": "BackdropNode", "x": (x0 - pad).round(), "y": (y0 - pad - title).round(), "knobs": knobs });
+        let created = self.run("node.create", params).and_then(|r| r["name"].as_str().and_then(|n| self.session.script.id_of(n).ok()));
+        if let Some(id) = created {
+            self.selection = vec![id];
+            self.open_properties(id);
         }
         created
     }
@@ -430,6 +478,36 @@ impl NukecraftApp {
         });
         if let Some(id) = fired {
             self.invoke(id);
+        }
+    }
+
+    /// The system's copy, cut and paste (they arrive as events, not keys), outside text fields.
+    fn handle_clipboard(&mut self, ctx: &egui::Context) {
+        if ctx.text_edit_focused() {
+            return;
+        }
+        let events: Vec<egui::Event> =
+            ctx.input(|i| i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect());
+        for e in events {
+            match e {
+                egui::Event::Copy => self.invoke("edit.copy"),
+                egui::Event::Cut => self.invoke("edit.cut"),
+                egui::Event::Paste(text) => self.paste(Some(text)),
+                _ => {}
+            }
+        }
+    }
+
+    /// Pastes nodes from `text` (the system clipboard) or the last copy, and selects them.
+    pub(crate) fn paste(&mut self, text: Option<String>) {
+        let text = text.filter(|t| t.contains("\"nukecraft\"")).unwrap_or_else(|| self.clipboard.clone());
+        if text.is_empty() {
+            self.set_status("Nothing to paste", true);
+            return;
+        }
+        if let Some(r) = self.run("edit.paste", json!({ "text": text })) {
+            let names: Vec<&str> = r["names"].as_array().map(|a| a.iter().filter_map(serde_json::Value::as_str).collect()).unwrap_or_default();
+            self.selection = names.iter().filter_map(|n| self.session.script.id_of(n).ok()).collect();
         }
     }
 

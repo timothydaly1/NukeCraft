@@ -28,6 +28,7 @@ enum Action {
     Begin(String),
     End,
     Rename { node: String, name: String },
+    Label { node: String, label: String },
     Disable { node: String, disabled: bool },
     Close(NodeId),
     Key { node: String, knob: &'static str, op: KeyOp },
@@ -128,6 +129,23 @@ fn node_panel(app: &mut NukecraftApp, ui: &mut egui::Ui, id: NodeId, actions: &m
                 let view = knob_view(app, &node, k);
                 knob_row(app, ui, &node.name, id, k, &view, actions, &mut elements);
                 ui.end_row();
+            }
+        });
+        // The label: shown under the node (a Backdrop's title, a StickyNote's text).
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
+            ui.label("label").on_hover_text("Text shown with the node in the Node Graph");
+            let key = format!("label:{}", id.0);
+            let buf = app.props.buffers.entry(key.clone()).or_insert_with(|| node.label.clone());
+            let r = ui.add(egui::TextEdit::multiline(buf).desired_rows(1).desired_width(f32::INFINITY));
+            elements.push((format!("props.{}.label", node.name), r.rect, "label".into()));
+            if r.lost_focus() {
+                let new = app.props.buffers.remove(&key).unwrap_or_default();
+                if new != node.label {
+                    actions.push(Action::Label { node: node.name.clone(), label: new });
+                }
+            } else if !r.has_focus() {
+                app.props.buffers.insert(key, node.label.clone());
             }
         });
         if class == "Write" {
@@ -374,6 +392,9 @@ fn apply(app: &mut NukecraftApp, actions: Vec<Action>) {
             Action::End => app.session.end_group(),
             Action::Rename { node, name } => {
                 app.run("node.rename", json!({ "node": node, "name": name }));
+            }
+            Action::Label { node, label } => {
+                app.run("node.label", json!({ "node": node, "label": label }));
             }
             Action::Disable { node, disabled } => {
                 app.run("node.disable", json!({ "node": node, "disabled": disabled }));

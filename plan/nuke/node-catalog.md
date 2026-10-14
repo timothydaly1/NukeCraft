@@ -131,6 +131,6 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 |---|---|---|
 | Dot | ✅ | |
 | NoOp | ✅ | |
-| Backdrop, StickyNote | — | [M2] (Node Graph items) |
+| Backdrop (BackdropNode), StickyNote | ✅ | Node Graph items: a backdrop carries the nodes on it, resizes from its corner, wraps the selection when made |
 | Group, Input, Output, Precomp, LiveGroup | — | [M2]/[M10] |
 | BlinkScript-style kernels | — | [M10] (WGSL or WebAssembly) |
