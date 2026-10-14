@@ -229,6 +229,7 @@ fn read_spec() -> NodeSpec {
         info: read_node_info,
         request: request_none,
         engine: read_node_engine,
+        input_time: None,
     }
 }
 
@@ -265,6 +266,7 @@ fn write_spec() -> NodeSpec {
         info: info_passthrough,
         request: request_same,
         engine: nukecraft_nodes::engine_passthrough,
+        input_time: None,
     }
 }
 

@@ -26,6 +26,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: generator_info,
             request: request_none,
             engine: constant_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "CheckerBoard2",
@@ -63,6 +64,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: generator_info,
             request: request_none,
             engine: checker_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Ramp",
@@ -89,6 +91,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: generator_info,
             request: request_none,
             engine: ramp_engine,
+            input_time: None,
         },
     ]
 }

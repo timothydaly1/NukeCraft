@@ -32,7 +32,9 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| FrameHold, TimeOffset, FrameRange | — | [M2] |
+| FrameHold | ✅ | `first_frame` (the current frame when made), `increment` |
+| TimeOffset | ✅ | `time_offset`, `reverse_input`; the frame range moves with it |
+| FrameRange | ◐ | Sets the reported range; nothing reads it yet but scripts |
 | Retime, TimeWarp, FrameBlend, TimeEcho, AppendClip | — | |
 | Kronos, OFlow (optical flow retiming) | — | |
 

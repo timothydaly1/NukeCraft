@@ -20,7 +20,7 @@ Everything in L0–L4 builds for `wasm32-unknown-unknown` (`cargo xtask wasm`).
 | L1 | `raster` | `Image`: any number of named channels (`rgba.red`, `depth.Z`, `layer.chan`) over a bbox, rows bottom-up, edge-repeat sampling, size and channel limits |
 | L1 | `curve` | Animation curves: keys on `FrameTime`, constant / linear / horizontal / Catmull-Rom segments, constant extrapolation |
 | L2 | `graph` | The script: `Root` settings, nodes (stable `NodeId`, unique name, class, knobs, inputs, DAG position), cycle-refusing connections, the `.ncs` file with a lenient, repairing loader |
-| L2 | `nodes` | The node registry (`NodeSpec`: class, inputs, knobs, `info`/`request`/`engine`), knob validation and evaluation, resampling filters, the built-in nodes |
+| L2 | `nodes` | The node registry (`NodeSpec`: class, inputs, knobs, `info`/`request`/`engine`/`input_time`), knob validation and evaluation, resampling filters, the built-in nodes |
 | L3 | `render` | Pull-based evaluation: info and region-of-interest propagation, per-render memoisation, cycle and depth limits, the render thread, display conversion |
 | L3 | `io` | PNG and OpenEXR in and out (pure Rust), frame-number patterns, the Read and Write nodes, `execute_write` |
 | L4 | `engine` | `Session`: script, undo/redo, journal, crash guard, the command registry, the demo script |
@@ -80,11 +80,13 @@ misread. Saving checks that the text reads back, then writes atomically (tempora
 
 ## 5. Rendering
 
-A node class is three functions, mirroring a Nuke operator:
+A node class is three functions, mirroring a Nuke operator (and optionally a fourth):
 
 - `info(ctx, input infos) → ImageInfo { format, bbox, channels, frames }` (Nuke's validate);
 - `request(ctx, own info, input infos, region, input) → region` — what part of an input is needed;
-- `engine(ctx, own info, inputs, region) → Image` — the pixels of exactly `region`.
+- `engine(ctx, own info, inputs, region) → Image` — the pixels of exactly `region`;
+- `input_time(ctx, input, input frame range) → FrameTime` — for time nodes (FrameHold,
+  TimeOffset): the time an input is read at; without it inputs are read at the node's own time.
 
 `Renderer::render(node, t, region)` computes the node's info, clamps `region` into its bbox
 (`clamp_into`), asks each connected input for its request, renders the inputs recursively, then runs

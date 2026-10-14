@@ -122,6 +122,7 @@ fn spec(class: &'static str, label: &'static str, help: &'static str, knobs: &'s
         info: info_passthrough,
         request: request_same,
         engine,
+        input_time: None,
     }
 }
 

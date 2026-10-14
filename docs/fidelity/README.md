@@ -1,9 +1,9 @@
 # Fidelity: checking NukeCraft against Nuke
 
-> **Last updated:** 2026-10-14 · **Harness:** ready (201 cases) · **Oracle numbers:** none yet
+> **Last updated:** 2026-10-14 · **Harness:** ready (207 cases) · **Oracle numbers:** none yet
 
 NukeCraft's tests pin its own behaviour; they can't show it matches Nuke. The fidelity harness
-(`crates/fidelity`) can: 201 synthetic cases (tiny graphs with Nuke's class and knob names on a
+(`crates/fidelity`) can: 207 synthetic cases (tiny graphs with Nuke's class and knob names on a
 64×64 format) are measured by NukeCraft and by Nuke, and compared value by value. Nuke's side is a
 generated Python script that writes one JSON file, the **oracle**; nothing else from Nuke is used
 or kept.
@@ -50,6 +50,7 @@ CheckerBoard, Exposure in densities and Cineon units) are measured too, so the n
 | F14 | `mask.*` (3), `unpremult.*` (4) | Mask input, `invert_mask` and mix on Grade and Merge; `unpremult` including a zero alpha |
 | F15 | `clamp.*` (4), `invert.*` (2), `multiply`, `add`, `gamma` (2), `exposure.*` (3) | The math nodes; Clamp's clamp-to values; Gamma 0; Exposure units |
 | F16 | `shuffle.*` (3), `copy.*` (5), `channelmerge.*` (12), `remove.*` (2) | Channel routing, constants, the built-in depth layer; Copy's bbox and A's edges outside its bbox; every ChannelMerge operation |
+| F19 | `framehold.*` (2), `timeoffset.*` (4) | Held frames, increments (also before the first frame), offsets both ways, reversing with and without an offset |
 | F18 | `reformat.*` (14), `mirror.*` (3), `position.fractional`, `cornerpin.*` (4) | Reformat's resize types, centring, box shape, scale, flip/flop/turn and filtering; Mirror2; Position's rounding; CornerPin2D's perspective mapping, filtering, disabled corners and invert (all on the coordinate image) |
 | F17 | `rectangle.*` (6), `radial.*` (5), `keymix.*` (3), `dissolve.*` (4) | Edge antialiasing and softness; compositing over a background, replace, invert, opacity; Radial's falloff; Keymix through a mask and without one; Dissolve between three inputs |
 
@@ -77,6 +78,7 @@ knowledge, not yet compared with Nuke itself.
 | F12 | Blur `crop`, Crop `black outside` | One-pixel black border added outside the box | Border handling with fractional boxes and `softness` |
 | F13 | ColorCorrect | Per range: saturation (Rec. 709), contrast about 0.18, gamma, gain, offset; master and range controls combine (factors multiply, offsets add); range weights from the input's luminance: shadows fade out by 0.09, highlights fade in from 0.5 to 1 (smoothstep), midtones the rest | The contrast pivot; the default `lookup` curves; how master and range controls combine; which luminance |
 | F14 | Masks and unpremult | `maskChannelInput` defaults to `rgba.alpha` (applies once the mask input is connected); the mask is clamped to 0..1 and multiplies `mix`; a channel the mask lacks is black; `unpremult` skips a zero alpha and leaves the alpha channel itself undivided | The default mask channel when a mask is connected from Python; mask values outside 0..1 |
+| F19 | Time nodes | FrameHold with `increment` holds `first_frame + n·increment`, also before `first_frame`; TimeOffset reads `t - time_offset`, then reverses over the input's range (`first + last - t`) | Reverse versus offset order; FrameHold's default `first_frame` |
 | F18 | Transform family | Reformat keeps the picture's shape by matching the output's width (or height, or whichever fits/fills), centred; turn is 90 degrees counter-clockwise before scaling; flip/flop after; the bbox is clipped to the new format unless `pbb`; Position rounds to whole pixels; CornerPin2D maps from-corners to to-corners by a homography, a disabled corner stays at its from position | Reformat's `turn` direction and the order of turn/flip/flop; whether Position filters fractional moves; CornerPin2D's filtering under strong perspective |
 | F17 | Draw and mix nodes | Rectangle: exact pixel coverage of a hard edge, a linear soft edge `softness` pixels wide centred on the edge; Radial: an ellipse in `area` fading from radius `1 - softness` to 1, smoothstep (linear with `plinear`); both blend `color` over the background by coverage times opacity (`replace` onto black); `area` defaults to the middle half of the format; Keymix without a mask replaces B with A | Every one of these: the soft-edge profiles, the default `area`, compositing (over or mix), Keymix's `channels` default and its behaviour without a mask |
 | F16 | Channel nodes | Shuffle's sources pick the in layer's first..fourth channel; a new out layer gets red, green, blue, alpha (`depth` is `depth.Z`); Copy's `bbox` defaults to union and outside A's bbox A's edges repeat; ChannelMerge: union `a+b-ab`, intersect/multiply/in `ab`, stencil `b(1-a)`, out `a(1-b)`, absminus, plus, minus `a-b`, from `b-a`, max, min | ChannelMerge's operation list and `in`/`intersect`; Copy's and Remove's defaults; Shuffle's `in2`/`out2` sources |

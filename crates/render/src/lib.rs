@@ -127,8 +127,24 @@ impl<'a> Renderer<'a> {
         (0..n.min(spec.max_inputs())).map(|i| node.input(i)).collect()
     }
 
-    fn input_infos(&mut self, ids: &[Option<NodeId>], t: FrameTime) -> Result<Vec<Option<ImageInfo>>> {
-        ids.iter().map(|id| id.map(|id| self.info(id, t)).transpose()).collect()
+    fn input_infos(&mut self, ids: &[Option<NodeId>], times: &[FrameTime]) -> Result<Vec<Option<ImageInfo>>> {
+        ids.iter().zip(times).map(|(id, t)| id.map(|id| self.info(id, *t)).transpose()).collect()
+    }
+
+    /// The time each input is read at: the node's own, unless its class remaps time.
+    fn input_times(&mut self, node: &'a Node, spec: &'a NodeSpec, knobs: &Knobs, ids: &[Option<NodeId>], t: FrameTime) -> Result<Vec<FrameTime>> {
+        let Some(remap) = spec.input_time else { return Ok(vec![t; ids.len()]) };
+        let script = self.script;
+        let ctx = Ctx { knobs, root: &script.root, time: t, node_name: &node.name };
+        let mut times = Vec::with_capacity(ids.len());
+        for (i, id) in ids.iter().enumerate() {
+            let frames = match id {
+                Some(id) => self.info(*id, t)?.frames,
+                None => script.root.frames,
+            };
+            times.push(remap(&ctx, i, frames));
+        }
+        Ok(times)
     }
 
     fn info_uncached(&mut self, node: &'a Node, t: FrameTime) -> Result<ImageInfo> {
@@ -140,8 +156,9 @@ impl<'a> Renderer<'a> {
                 None => Ok(ImageInfo::black(&self.script.root)),
             };
         }
-        let infos = self.input_infos(&ids, t)?;
         let knobs = self.knobs(node, spec, t);
+        let times = self.input_times(node, spec, &knobs, &ids, t)?;
+        let infos = self.input_infos(&ids, &times)?;
         let ctx = Ctx { knobs: &knobs, root: &self.script.root, time: t, node_name: &node.name };
         Ok((spec.info)(&ctx, &infos)?)
     }
@@ -155,17 +172,18 @@ impl<'a> Renderer<'a> {
                 None => Ok(Image::new(IRect::EMPTY, info.channels.clone())?),
             };
         }
-        let infos = self.input_infos(&ids, t)?;
         let knobs = self.knobs(node, spec, t);
+        let times = self.input_times(node, spec, &knobs, &ids, t)?;
+        let infos = self.input_infos(&ids, &times)?;
         let ctx = Ctx { knobs: &knobs, root: &self.script.root, time: t, node_name: &node.name };
         let mut inputs = Vec::with_capacity(ids.len());
-        for (i, (id, inf)) in ids.iter().zip(&infos).enumerate() {
+        for (i, ((id, inf), ti)) in ids.iter().zip(&infos).zip(&times).enumerate() {
             let (Some(id), Some(inf)) = (id, inf) else {
                 inputs.push(None);
                 continue;
             };
             let want = (spec.request)(&ctx, info, &infos, region, i);
-            let image = self.render(*id, t, want)?;
+            let image = self.render(*id, *ti, want)?;
             inputs.push(Some(Input { info: inf.clone(), image }));
         }
         let img = (spec.engine)(&ctx, info, &inputs, region)?;
@@ -332,6 +350,43 @@ mod tests {
         let reg = Registry::builtin();
         let img = with_render_stack(|| Renderer::new(&s, &reg).render_format(prev, FrameTime::ZERO)).unwrap().unwrap().1;
         assert_eq!(img.get_at(0, 0, 0), 0.5);
+    }
+
+    #[test]
+    fn time_nodes_read_their_input_at_other_times() {
+        use nukecraft_curve::Interp;
+        let mut s = Script::new();
+        s.root.format = Format::new(4, 4, 1.0);
+        let c = s.add_node("Constant", None).unwrap();
+        // red = the frame number, keyed on every frame from 1 to 30.
+        let mut color = KnobValue::number(0.0);
+        for f in 1..=30 {
+            color.set_numbers(&[f as f64], Some((FrameTime::from_frame(f), Interp::Linear))).unwrap();
+        }
+        s.node_mut(c).unwrap().knobs.insert("color".into(), color);
+        let hold = s.add_node("FrameHold", None).unwrap();
+        s.node_mut(hold).unwrap().knobs.insert("first_frame".into(), KnobValue::number(7.0));
+        s.connect(hold, 0, c).unwrap();
+        let off = s.add_node("TimeOffset", None).unwrap();
+        s.node_mut(off).unwrap().knobs.insert("time_offset".into(), KnobValue::number(3.0));
+        s.connect(off, 0, c).unwrap();
+        // A TimeOffset of the FrameHold still holds: the hold sees the offset time, holds anyway.
+        let both = s.add_node("TimeOffset", None).unwrap();
+        s.node_mut(both).unwrap().knobs.insert("time_offset".into(), KnobValue::number(-2.0));
+        s.connect(both, 0, hold).unwrap();
+        let reg = Registry::builtin();
+        let mut r = Renderer::new(&s, &reg);
+        let red = |r: &mut Renderer, id, f: i64| r.render_format(id, FrameTime::from_frame(f)).unwrap().1.get_at(0, 1, 1);
+        assert_eq!(red(&mut r, c, 20), 20.0);
+        assert_eq!(red(&mut r, hold, 20), 7.0);
+        assert_eq!(red(&mut r, hold, 2), 7.0);
+        assert_eq!(red(&mut r, off, 20), 17.0);
+        assert_eq!(red(&mut r, both, 20), 7.0);
+        assert_eq!(r.info(off, FrameTime::from_frame(1)).unwrap().frames, nukecraft_time::FrameRange::new(4, 103));
+        // Disabled: no remapping.
+        s.node_mut(off).unwrap().disabled = true;
+        let mut r = Renderer::new(&s, &reg);
+        assert_eq!(red(&mut r, off, 20), 20.0);
     }
 
     #[test]

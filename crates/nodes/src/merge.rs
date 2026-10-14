@@ -98,6 +98,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: merge_info,
             request: request_same,
             engine: merge_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Keymix",
@@ -142,6 +143,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: keymix_info,
             request: request_same,
             engine: keymix_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Dissolve",
@@ -162,6 +164,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: dissolve_info,
             request: dissolve_request,
             engine: dissolve_engine,
+            input_time: None,
         },
     ]
 }

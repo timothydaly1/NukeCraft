@@ -24,6 +24,7 @@ pub mod knobs;
 mod merge;
 mod other_nodes;
 mod reformat;
+mod time_nodes;
 mod transform;
 
 use nukecraft_geom::{Format, IRect};
@@ -64,6 +65,9 @@ pub type InfoFn = fn(&Ctx, &[Option<ImageInfo>]) -> Result<ImageInfo>;
 pub type RequestFn = fn(&Ctx, &ImageInfo, &[Option<ImageInfo>], IRect, usize) -> IRect;
 /// `(ctx, own info, inputs, output region)` → pixels covering the region.
 pub type EngineFn = fn(&Ctx, &ImageInfo, &[Option<Input>], IRect) -> Result<Image>;
+/// `(ctx at the node's time, input index, that input's frame range)` → the time the input is
+/// read at (time nodes: FrameHold, TimeOffset).
+pub type InputTimeFn = fn(&Ctx, usize, FrameRange) -> FrameTime;
 
 /// One input pipe.
 #[derive(Clone, Copy, Debug)]
@@ -94,6 +98,9 @@ pub struct NodeSpec {
     pub info: InfoFn,
     pub request: RequestFn,
     pub engine: EngineFn,
+    /// When the node reads its inputs at other times than its own; `None` reads them at the
+    /// node's time.
+    pub input_time: Option<InputTimeFn>,
 }
 
 /// The node classes a session knows.
@@ -202,6 +209,7 @@ impl Registry {
             .chain(transform::specs())
             .chain(reformat::specs())
             .chain(blur::specs())
+            .chain(time_nodes::specs())
             .chain(other_nodes::specs())
         {
             // Built-in class names are distinct; a duplicate here is caught by the tests.
@@ -366,6 +374,7 @@ mod tests {
             + transform::specs().len()
             + reformat::specs().len()
             + blur::specs().len()
+            + time_nodes::specs().len()
             + other_nodes::specs().len();
         assert_eq!(r.iter().count(), n, "a built-in class name or alias collides");
         assert!(r.get("Merge").is_some_and(|s| s.class == "Merge2"));
@@ -407,6 +416,7 @@ mod tests {
             info: info_passthrough,
             request: request_same,
             engine: engine_passthrough,
+            input_time: None,
         };
         assert_eq!(r.register(spec).unwrap_err(), NodeError::Duplicate("Blur".into()));
     }

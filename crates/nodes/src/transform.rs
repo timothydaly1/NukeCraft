@@ -51,6 +51,7 @@ pub fn specs() -> Vec<NodeSpec> {
         info: transform_info,
         request: transform_request,
         engine: transform_engine,
+        input_time: None,
     }]
 }
 

@@ -45,6 +45,9 @@ pub enum KnobDefault {
     /// Fractions of the root format, alternately of its width and height: `[x, y, r, t]` for a
     /// box (Rectangle's `area`), `[x, y]` for a point (CornerPin2D's corners).
     FormatFraction(&'static [f64]),
+    /// The current frame when the node is made (FrameHold's `first_frame`); 0 where no time is
+    /// known.
+    CurrentFrame,
 }
 
 impl KnobDefault {
@@ -120,6 +123,7 @@ impl KnobSpec {
                 KnobValue::numbers(&[c.x, c.y])
             }
             KnobDefault::FormatBox => KnobValue::numbers(&[0.0, 0.0, format.width as f64, format.height as f64]),
+            KnobDefault::CurrentFrame => KnobValue::number(0.0),
             KnobDefault::FormatFraction(fs) => {
                 let (w, h) = (format.width as f64, format.height as f64);
                 let v: Vec<f64> = fs.iter().enumerate().map(|(i, f)| f * if i % 2 == 0 { w } else { h }).collect();

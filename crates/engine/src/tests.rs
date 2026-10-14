@@ -192,3 +192,17 @@ fn undo_groups_make_one_step() {
     assert_eq!(s.script.by_name("Blur1").unwrap().x, 0.0);
     assert!(!s.in_group());
 }
+
+#[test]
+fn creation_fixes_format_and_time_defaults() {
+    let mut s = Session::new();
+    exec(&mut s, "time.goto", json!({ "frame": 12 }));
+    exec(&mut s, "node.create", json!({ "class": "FrameHold" }));
+    exec(&mut s, "node.create", json!({ "class": "Rectangle" }));
+    let knob = |s: &Session, node: &str, k: &str| {
+        s.script.by_name(node).and_then(|n| n.knobs.get(k)).and_then(|v| v.eval(nukecraft_time::FrameTime::ZERO).as_numbers().map(<[f64]>::to_vec))
+    };
+    assert_eq!(knob(&s, "FrameHold1", "first_frame"), Some(vec![12.0]), "holds the frame it was made on");
+    let (w, h) = (s.script.root.format.width as f64, s.script.root.format.height as f64);
+    assert_eq!(knob(&s, "Rectangle1", "area"), Some(vec![w / 4.0, h / 4.0, w * 0.75, h * 0.75]));
+}

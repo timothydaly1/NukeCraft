@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F18); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F19); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -69,6 +69,7 @@ pub fn cases() -> Vec<Case> {
     channels(&mut out);
     draw_and_mix(&mut out);
     reformat(&mut out);
+    time(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -607,6 +608,37 @@ fn reformat(out: &mut Vec<Case>) {
     ] {
         let node = with_knobs(with_knobs(NodeDef::new("N", "CornerPin2D"), quad.clone()), extra);
         out.push(with(id, "The coordinate image through CornerPin2D onto a quad", node, grid_of(64, 64, 5)));
+    }
+}
+
+/// F19: FrameHold and TimeOffset on a Constant whose red is the frame number (keyed on frames
+/// 1 to 12 and 89 to 100).
+fn time(out: &mut Vec<Case>) {
+    let frames = || {
+        let mut c = NodeDef::new("C", "Constant");
+        for f in (1..=12).chain(89..=100) {
+            c = c.key("color", f as f64, json!([f, 0, 0, 1]));
+        }
+        c
+    };
+    let at = |frames: &[f64]| -> Vec<Sample> {
+        frames.iter().map(|f| Sample { node: "N".into(), frame: *f, points: vec![(3, 3)], channels: vec!["rgba.red".into()] }).collect()
+    };
+    for (id, node, sampled) in [
+        ("framehold.hold", NodeDef::new("N", "FrameHold").knob("first_frame", json!(5)), vec![1.0, 5.0, 9.0, 95.0]),
+        (
+            "framehold.increment",
+            NodeDef::new("N", "FrameHold").knob("first_frame", json!(2)).knob("increment", json!(3)),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 8.0, 10.0],
+        ),
+        ("timeoffset.offset", NodeDef::new("N", "TimeOffset").knob("time_offset", json!(3)), vec![5.0, 9.0, 12.0]),
+        ("timeoffset.negative", NodeDef::new("N", "TimeOffset").knob("time_offset", json!(-4)), vec![1.0, 6.0, 90.0]),
+        ("timeoffset.reverse", NodeDef::new("N", "TimeOffset").knob("reverse_input", json!(true)), vec![1.0, 5.0, 95.0, 100.0]),
+        ("timeoffset.reverse_offset", NodeDef::new("N", "TimeOffset").knob("reverse_input", json!(true)).knob("time_offset", json!(2)), vec![3.0, 7.0, 97.0]),
+    ] {
+        let mut c = case(id, "F19", "A Constant whose red is the frame number, through a time node", vec![frames(), node.input(0, "C")], Vec::new());
+        c.samples = at(&sampled);
+        out.push(c);
     }
 }
 

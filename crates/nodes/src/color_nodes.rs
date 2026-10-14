@@ -113,6 +113,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: info_passthrough,
             request: request_same,
             engine: grade_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Saturation",
@@ -127,6 +128,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: info_passthrough,
             request: request_same,
             engine: saturation_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Premult",
@@ -141,6 +143,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: info_passthrough,
             request: request_same,
             engine: premult_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Unpremult",
@@ -155,6 +158,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: info_passthrough,
             request: request_same,
             engine: unpremult_engine,
+            input_time: None,
         },
     ]
 }

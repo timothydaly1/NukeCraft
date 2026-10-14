@@ -104,6 +104,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: shuffle_info,
             request: request_same,
             engine: shuffle_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Copy",
@@ -118,6 +119,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: copy_info,
             request: request_same,
             engine: copy_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "ChannelMerge",
@@ -132,6 +134,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: channel_merge_info,
             request: request_same,
             engine: channel_merge_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Remove",
@@ -146,6 +149,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: remove_info,
             request: request_same,
             engine: remove_engine,
+            input_time: None,
         },
     ]
 }

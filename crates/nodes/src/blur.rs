@@ -63,6 +63,7 @@ pub fn specs() -> Vec<NodeSpec> {
         info: blur_info,
         request: blur_request,
         engine: blur_engine,
+        input_time: None,
     }]
 }
 

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use nukecraft_curve::Interp;
 use nukecraft_geom::{Format, IRect};
 use nukecraft_graph::{KnobValue, NodeId, Script};
-use nukecraft_nodes::{KnobKind, NodeSpec};
+use nukecraft_nodes::{KnobDefault, KnobKind, NodeSpec};
 use nukecraft_render::{Renderer, with_render_stack};
 use nukecraft_time::{Fps, FrameRange, FrameTime, parse_frames};
 use serde_json::{Map, Value, json};
@@ -363,13 +363,17 @@ fn node_create(s: &mut Session, p: &Value) -> Result<Value> {
         None => s.script.unique_name(label),
     };
     let id = s.script.add_node(class, Some(&name))?;
-    // Format-dependent defaults are fixed when the node is made, as Nuke does.
+    // Format- and time-dependent defaults are fixed when the node is made, as Nuke does.
     let format = s.script.root.format.clone();
+    let frame = s.time.floor_frame() as f64;
     for k in knob_specs {
-        if k.default.is_format_dependent()
-            && let Some(n) = s.script.node_mut(id)
-        {
-            n.knobs.insert(k.name.into(), k.default_value(&format));
+        let value = match k.default {
+            KnobDefault::CurrentFrame => KnobValue::number(frame),
+            d if d.is_format_dependent() => k.default_value(&format),
+            _ => continue,
+        };
+        if let Some(n) = s.script.node_mut(id) {
+            n.knobs.insert(k.name.into(), value);
         }
     }
     if let Some(knobs) = p.get("knobs") {

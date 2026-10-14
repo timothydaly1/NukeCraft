@@ -75,6 +75,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: rectangle_info,
             request: request_same,
             engine: rectangle_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Radial",
@@ -89,6 +90,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: radial_info,
             request: request_same,
             engine: radial_engine,
+            input_time: None,
         },
     ]
 }

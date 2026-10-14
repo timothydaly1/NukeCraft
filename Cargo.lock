@@ -1944,6 +1944,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "nukecraft-color",
+ "nukecraft-curve",
  "nukecraft-geom",
  "nukecraft-graph",
  "nukecraft-nodes",

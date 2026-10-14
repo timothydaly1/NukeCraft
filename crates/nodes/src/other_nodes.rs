@@ -46,6 +46,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: crop_info,
             request: crop_request,
             engine: crop_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Dot",
@@ -60,6 +61,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: info_passthrough,
             request: request_same,
             engine: engine_passthrough,
+            input_time: None,
         },
         NodeSpec {
             class: "Switch",
@@ -74,6 +76,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: switch_info,
             request: switch_request,
             engine: switch_engine,
+            input_time: None,
         },
     ]
 }

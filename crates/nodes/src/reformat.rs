@@ -96,6 +96,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: reformat_info,
             request: reformat_request,
             engine: reformat_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Mirror2",
@@ -110,6 +111,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: mirror_info,
             request: mirror_request,
             engine: mirror_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "Position",
@@ -124,6 +126,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: position_info,
             request: position_request,
             engine: position_engine,
+            input_time: None,
         },
         NodeSpec {
             class: "CornerPin2D",
@@ -138,6 +141,7 @@ pub fn specs() -> Vec<NodeSpec> {
             info: cornerpin_info,
             request: cornerpin_request,
             engine: cornerpin_engine,
+            input_time: None,
         },
     ]
 }
