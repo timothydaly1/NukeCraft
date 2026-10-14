@@ -113,6 +113,14 @@ fn delete_reconnects_the_pipe() {
     let nodes = exec(&mut s, "query.nodes", json!({}));
     let blur = nodes.as_array().unwrap().iter().find(|n| n["name"] == "Blur1").unwrap();
     assert_eq!(blur["inputs"], json!(["Constant1"]));
+    // Deleting a whole chain joins its ends.
+    exec(&mut s, "node.create", json!({ "class": "Grade", "inputs": ["Constant1"] }));
+    exec(&mut s, "node.create", json!({ "class": "Saturation", "inputs": ["Grade1"] }));
+    exec(&mut s, "node.connect", json!({ "node": "Blur1", "input": 0, "from": "Saturation1" }));
+    exec(&mut s, "node.delete", json!({ "nodes": ["Saturation1", "Grade1"] }));
+    let nodes = exec(&mut s, "query.nodes", json!({}));
+    let blur = nodes.as_array().unwrap().iter().find(|n| n["name"] == "Blur1").unwrap();
+    assert_eq!(blur["inputs"], json!(["Constant1"]));
 }
 
 #[test]

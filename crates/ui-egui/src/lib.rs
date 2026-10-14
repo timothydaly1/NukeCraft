@@ -12,6 +12,7 @@
 
 pub mod automation;
 mod dialogs;
+mod graph;
 pub mod keys;
 mod menus;
 pub mod snapshot;
@@ -21,6 +22,9 @@ use egui::KeyboardShortcut;
 use nukecraft_engine::{Session, command_specs};
 use nukecraft_graph::NodeId;
 use serde_json::{Value, json};
+
+/// Vertical spacing of a chain of nodes in the Node Graph, in graph units.
+const NODE_ROW: f64 = 60.0;
 
 /// Seconds between autosaves of a script with unsaved changes.
 const AUTOSAVE_SECONDS: f64 = 120.0;
@@ -35,6 +39,9 @@ pub struct NukecraftApp {
     pub automation: automation::Registry,
     pub(crate) selection: Vec<NodeId>,
     pub(crate) viewed: Option<NodeId>,
+    /// Nodes whose properties are open, most recent first.
+    pub(crate) open_props: Vec<NodeId>,
+    pub(crate) graph: graph::GraphState,
     pub(crate) dialogs: dialogs::Dialogs,
     status: Option<Status>,
     shortcuts: Vec<(KeyboardShortcut, &'static str)>,
@@ -50,6 +57,33 @@ struct Status {
     since: f64,
 }
 
+/// Every node downstream of `id` (not `id` itself), each once.
+fn downstream(script: &nukecraft_graph::Script, id: NodeId) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    let mut stack = vec![id];
+    while let Some(n) = stack.pop() {
+        for (c, _) in script.consumers(n) {
+            if c != id && !out.contains(&c) {
+                out.push(c);
+                stack.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// The first position at or to the right of `(x, y)` where a node doesn't overlap another.
+fn free_spot(script: &nukecraft_graph::Script, mut x: f64, y: f64) -> (f64, f64) {
+    for _ in 0..100 {
+        let taken = script.nodes().iter().any(|n| (n.x - x).abs() < 100.0 && (n.y - y).abs() < 30.0);
+        if !taken {
+            break;
+        }
+        x += 110.0;
+    }
+    (x, y)
+}
+
 impl NukecraftApp {
     pub fn new(ctx: &egui::Context, session: Session) -> NukecraftApp {
         theme::apply(ctx);
@@ -61,6 +95,8 @@ impl NukecraftApp {
             automation: automation::Registry::default(),
             selection: Vec::new(),
             viewed: None,
+            open_props: Vec::new(),
+            graph: graph::GraphState::default(),
             dialogs: dialogs::Dialogs::default(),
             status: None,
             shortcuts,
@@ -93,10 +129,7 @@ impl NukecraftApp {
             ui.heading("Properties");
             ui.allocate_space(ui.available_size());
         });
-        egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).show(ui, |ui| {
-            ui.heading("Node Graph");
-            ui.allocate_space(ui.available_size());
-        });
+        egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).frame(egui::Frame::NONE).show(ui, |ui| graph::show(self, ui));
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.painter().rect_filled(ui.max_rect(), 0.0, theme::VIEWER_BG);
         });
@@ -186,6 +219,12 @@ impl NukecraftApp {
     /// taking over that node's downstream pipes unless `branch`. One undo step. Selects the new
     /// node and returns it.
     pub fn create_node(&mut self, class: &str, branch: bool) -> Option<NodeId> {
+        self.create_node_at(class, branch, None)
+    }
+
+    /// [`NukecraftApp::create_node`], placed at graph position `at` (its centre) when nothing
+    /// is selected.
+    pub fn create_node_at(&mut self, class: &str, branch: bool, at: Option<(f64, f64)>) -> Option<NodeId> {
         let spec = self.session.registry.get(class)?;
         let (label, takes_input) = (spec.label, !spec.inputs.is_empty() || spec.extra_inputs);
         let upstream = self.selection.last().copied().filter(|_| takes_input);
@@ -194,10 +233,34 @@ impl NukecraftApp {
         if let Some(up) = upstream.and_then(|u| script.node(u)) {
             params["inputs"] = json!([up.name]);
             params["x"] = json!(up.x);
-            params["y"] = json!(up.y + 60.0);
+            params["y"] = json!(up.y + NODE_ROW);
+        }
+        if upstream.is_none()
+            && let Some((x, y)) = at
+        {
+            params["x"] = json!((x - 45.0).round());
+            params["y"] = json!((y - 13.0).round());
         }
         let consumers = upstream.map(|u| script.consumers(u)).unwrap_or_default();
+        // Make room: an insert pushes everything downstream of the upstream node down a row; a
+        // branch moves right until the spot is free.
+        let mut shift = Vec::new();
+        if let Some(up) = upstream {
+            if !branch && !consumers.is_empty() {
+                for id in downstream(script, up) {
+                    if let Some(n) = script.node(id) {
+                        shift.push(json!({ "node": n.name, "x": n.x, "y": n.y + NODE_ROW }));
+                    }
+                }
+            } else if let (Some(x), Some(y)) = (params["x"].as_f64(), params["y"].as_f64()) {
+                let (x, _) = free_spot(script, x, y);
+                params["x"] = json!(x);
+            }
+        }
         self.session.begin_group(&format!("Create {label}"));
+        if !shift.is_empty() {
+            self.run("node.move", json!({ "moves": shift }));
+        }
         let created = self.run("node.create", params).and_then(|r| r["name"].as_str().and_then(|n| self.session.script.id_of(n).ok()));
         if let (Some(new), false) = (created, branch) {
             let new_name = self.session.script.name_of(new).map(str::to_string).unwrap_or_default();
@@ -209,8 +272,16 @@ impl NukecraftApp {
         self.session.end_group();
         if let Some(new) = created {
             self.selection = vec![new];
+            self.open_properties(new);
         }
         created
+    }
+
+    /// Opens a node's properties at the top of the Properties panel.
+    pub fn open_properties(&mut self, id: NodeId) {
+        self.open_props.retain(|o| *o != id);
+        self.open_props.insert(0, id);
+        self.open_props.truncate(8);
     }
 
     /// Opens a script from a path.
@@ -226,6 +297,8 @@ impl NukecraftApp {
 
     fn after_open(&mut self) {
         self.selection.clear();
+        self.open_props.clear();
+        self.graph = graph::GraphState::default();
         self.view_default();
     }
 
@@ -239,13 +312,14 @@ impl NukecraftApp {
     fn prune(&mut self) {
         let script = &self.session.script;
         self.selection.retain(|id| script.node(*id).is_some());
+        self.open_props.retain(|id| script.node(*id).is_some());
         if self.viewed.is_some_and(|v| script.node(v).is_none()) {
             self.viewed = None;
         }
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        let typing = ctx.egui_wants_keyboard_input();
+        let typing = ctx.text_edit_focused();
         let mut fired = None;
         ctx.input_mut(|i| {
             for (sc, id) in &self.shortcuts {

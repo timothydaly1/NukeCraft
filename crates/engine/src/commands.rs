@@ -263,19 +263,37 @@ fn node_delete(s: &mut Session, p: &Value) -> Result<Value> {
     let ids = params::nodes(&s.script, p)?;
     let reconnect = params::opt_bool(p, "reconnect")?.unwrap_or(true);
     let doomed: HashSet<NodeId> = ids.iter().copied().collect();
-    let mut deleted = Vec::new();
-    for id in ids {
-        let Some(node) = s.script.node(id) else { continue };
-        let upstream = node.input(0).filter(|u| !doomed.contains(u));
-        let (node, consumers) = s.script.remove_node(id)?;
-        if reconnect && let Some(up) = upstream {
-            for (c, i) in consumers {
-                if !doomed.contains(&c) {
-                    s.script.connect(c, i, up)?;
+    // Where each deleted node's consumers reconnect: the nearest upstream node (through input 0)
+    // that survives, worked out before anything is removed so deleting a chain keeps the pipe.
+    let plan: Vec<(NodeId, Option<NodeId>)> = ids
+        .iter()
+        .map(|&id| {
+            let mut upstream = s.script.node(id).and_then(|n| n.input(0));
+            for _ in 0..=doomed.len() {
+                match upstream {
+                    Some(u) if doomed.contains(&u) => upstream = s.script.node(u).and_then(|n| n.input(0)),
+                    _ => break,
                 }
             }
+            (id, upstream.filter(|u| !doomed.contains(u)))
+        })
+        .collect();
+    let mut deleted = Vec::new();
+    let mut rewire = Vec::new();
+    for (id, upstream) in plan {
+        if s.script.node(id).is_none() {
+            continue;
+        }
+        let (node, consumers) = s.script.remove_node(id)?;
+        if let Some(up) = upstream {
+            rewire.extend(consumers.into_iter().filter(|(c, _)| !doomed.contains(c)).map(|(c, i)| (c, i, up)));
         }
         deleted.push(node.name);
+    }
+    if reconnect {
+        for (c, i, up) in rewire {
+            s.script.connect(c, i, up)?;
+        }
     }
     Ok(json!({ "deleted": deleted }))
 }
