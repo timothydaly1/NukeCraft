@@ -229,6 +229,53 @@ mod viewer {
         assert!(h.app.session.history().is_empty());
     }
 
+    /// A session with a small Constant feeding a Write into a fresh temp directory.
+    fn writer(name: &str, frames: i64) -> (Headless, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("nukecraft-ui-render-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut s = Session::new();
+        s.execute("root.settings", &json!({ "format": { "width": 32, "height": 16 }, "first": 1, "last": frames })).unwrap();
+        s.execute("node.create", &json!({ "class": "Constant", "knobs": { "color": [0.5, 0.25, 0.1, 1] } })).unwrap();
+        let file = dir.join("out.####.png").display().to_string();
+        s.execute("node.create", &json!({ "class": "Write", "inputs": ["Constant1"], "knobs": { "file": file } })).unwrap();
+        let mut h = Headless::new(s, Vec2::new(1024.0, 700.0), 1.0);
+        h.frames(2);
+        (h, dir)
+    }
+
+    #[test]
+    fn render_runs_in_the_background_and_reports() {
+        let (mut h, dir) = writer("bg", 3);
+        h.app.invoke("render.execute");
+        assert!(h.app.busy(), "the job runs while the window keeps drawing");
+        h.settle(Duration::from_secs(20));
+        assert!(h.app.render_job.is_none());
+        for f in 1..=3 {
+            assert!(dir.join(format!("out.{f:04}.png")).exists(), "frame {f}");
+        }
+        assert!(h.app.status.as_ref().is_some_and(|s| s.text == "Rendered 3 files" && !s.error));
+        // Rendering is not an edit: no undo step beyond the three that built the script.
+        assert_eq!(h.app.session.history().len(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_render_can_be_cancelled() {
+        let (mut h, dir) = writer("cancel", 2000);
+        h.app.invoke("render.execute");
+        h.frames(2);
+        assert!(h.app.automation.find("render.progress").is_some(), "progress shows");
+        h.click("render.cancel", 1, Modifiers::NONE).unwrap();
+        h.settle(Duration::from_secs(20));
+        assert!(h.app.render_job.is_none());
+        let status = h.app.status.as_ref().map(|s| s.text.clone()).unwrap_or_default();
+        assert!(status.starts_with("Render cancelled after"), "{status}");
+        let written = std::fs::read_dir(&dir).map(|d| d.count()).unwrap_or(0);
+        assert!(written < 2000, "stopped early ({written} files)");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn render_errors_are_shown_not_fatal() {
         let mut h = Headless::new(Session::new(), Vec2::new(1024.0, 700.0), 1.0);

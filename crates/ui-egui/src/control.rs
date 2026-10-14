@@ -163,6 +163,10 @@ impl NukecraftApp {
                 "path": self.session.path.as_ref().map(|p| p.display().to_string()),
                 "busy": self.busy(),
                 "viewerError": self.viewer_error(),
+                "render": self.render_job.as_ref().map(|j| {
+                    let p = j.progress();
+                    json!({ "done": p.done, "total": p.total, "current": p.current })
+                }),
             })),
             "app.view" => {
                 let node = p["node"].as_str().ok_or("`node` is required")?;

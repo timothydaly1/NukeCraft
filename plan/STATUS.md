@@ -6,11 +6,11 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** M2.7: Render… without blocking the window (progress, cancel), then the Curve
-  Editor and on-viewer handles (Transform, CornerPin, Rectangle/Radial, Ramp); then the rest of
-  M2 (Roto, Group, Backdrop, ColorBars, CheckerBoard's colours and lines) and the other G1
-  follow-ups in `docs/gaps.md`. When the oracle arrives, fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (150 tests, including headless UI and fidelity tests).
+- **Next task:** M2.8 on-viewer handles (Transform, CornerPin, Rectangle/Radial, Ramp, Crop), then
+  M2.9 the Curve Editor; then the rest of M2 (Roto, Group, Backdrop, ColorBars, CheckerBoard's
+  colours and lines) and the other G1 follow-ups in `docs/gaps.md`. When the oracle arrives,
+  fidelity fixes come first.
+- **Gate:** `cargo xtask ci` green (152 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -19,6 +19,8 @@
 
 ## Recently done
 
+- M2.7: Render… and a Write's Render button run in the background (progress window, Cancel; the
+  same plan as `render.execute`); `app.state` reports the progress.
 - M2.6: Sharpen, Erode (fast) and (filter), Glow, Median, NoOp; Blur gains a mask input; blurs and
   erodes read past the image's edge in constant time; 14 more fidelity cases (F20).
 - M2.5: time nodes FrameHold, TimeOffset, FrameRange; the renderer reads inputs at the times a node

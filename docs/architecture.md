@@ -128,6 +128,11 @@ The Viewer renders on its own thread with a 64 MB stack and its own node registr
 copy of the script; only the newest waiting request is rendered. Finished frames are cached by
 (script revision, node, time), so any edit invalidates them and nothing stale is shown.
 
+Render… (and a Write node's Render button) runs the same plan as the `render.execute` command
+(`nukecraft_engine::render_plan`) on a background thread from a copy of the script, frame by frame,
+with a progress window and Cancel; the window stays responsive and edits made meanwhile don't
+affect the render. The command itself stays synchronous for the CLI, MCP and the control channel.
+
 Every interactive element registers an automation id and rect each frame. The control channel
 (`--control PORT`) and the headless harness (`snapshot::Headless`) click, drag and type by id; the
 harness also rasterises egui's triangles on the CPU, which lets agents and tests look at the UI

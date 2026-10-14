@@ -1,6 +1,6 @@
 # Where NukeCraft falls short
 
-> **Last reviewed:** 2026-10-14 · **Change:** M2.6 (filter nodes) · **Target:** Foundry Nuke (current release)
+> **Last reviewed:** 2026-10-14 · **Change:** M2.7 (background rendering) · **Target:** Foundry Nuke (current release)
 
 An honest list of how far NukeCraft is from being a replacement for Nuke, ranked by what blocks real
 work first. Read it before choosing work. Numbers marked "≈" are judgements, not measurements; how
@@ -18,7 +18,7 @@ production work in it yet.
 
 | # | Gap | Why it matters | Milestone |
 |---|---|---|---|
-| G1 | **Desktop app is a first version**: no Curve Editor or Dope Sheet, no on-viewer handles (Transform, Ramp, Crop), no colour picker, no copy/paste of nodes, Groups or Backdrops, no Dot insertion on a pipe, fixed panel layout (no docking), no recent files or preferences; Render… blocks the window while it writes; the Viewer shows only the format (not the bbox outside it), no wipe/compare or ROI | Artists feel these within minutes | M1 follow-ups, M2 |
+| G1 | **Desktop app is a first version**: no Curve Editor or Dope Sheet, no on-viewer handles (Transform, Ramp, Crop), no colour picker, no copy/paste of nodes, Groups or Backdrops, no Dot insertion on a pipe, fixed panel layout (no docking), no recent files or preferences; the Viewer shows only the format (not the bbox outside it), no wipe/compare or ROI | Artists feel these within minutes | M1 follow-ups, M2 |
 | G2 | **Node library** (≈ 43 of the ≈ 250 nodes in Nuke's toolbar; no Roto, Tracker, Keyer, retiming, Shuffle2's mapping UI…) | Real scripts use 30–60 distinct classes | M2, M5–M8 |
 | G3 | **No fidelity measurements yet**: the harness is ready (221 cases, [fidelity/README.md](fidelity/README.md)) but Nuke's numbers haven't been captured | "Looks right" isn't "matches Nuke"; artists notice filter and blur differences | needs a Nuke session (Non-commercial is enough) |
 | G4 | **No `.nk` import or export** | Existing work and studio pipelines live in `.nk` | M3 |

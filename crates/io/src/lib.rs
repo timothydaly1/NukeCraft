@@ -300,39 +300,44 @@ fn read_node_engine(ctx: &Ctx, info: &ImageInfo, _: &[Option<Input>], region: IR
 
 /// Renders a Write node at each frame and writes the files. Returns the paths written.
 pub fn execute_write(script: &Script, registry: &Registry, write: NodeId, frames: &[i64]) -> Result<Vec<PathBuf>> {
+    let mut written = Vec::new();
+    for &frame in frames {
+        written.extend(execute_write_frame(script, registry, write, frame)?);
+    }
+    Ok(written)
+}
+
+/// Renders a Write node at one frame and writes its file; `None` for a disabled Write.
+pub fn execute_write_frame(script: &Script, registry: &Registry, write: NodeId, frame: i64) -> Result<Option<PathBuf>> {
     let node = script.node(write).ok_or_else(|| IoError::Other(format!("no node with id {}", write.0)))?;
     let spec = registry.get(&node.class).ok_or_else(|| IoError::Other(format!("unknown class {}", node.class)))?;
     if spec.class != "Write" {
         return Err(IoError::Other(format!("`{}` is a {}, not a Write node", node.name, node.class)));
     }
     if node.disabled {
-        return Ok(Vec::new());
+        return Ok(None);
     }
-    let mut written = Vec::new();
-    for &frame in frames {
-        let t = FrameTime::from_frame(frame);
-        let knobs = nukecraft_nodes::Knobs::evaluate(spec.knobs, &node.knobs, t, &script.root.format);
-        let ctx = Ctx { knobs: &knobs, root: &script.root, time: t, node_name: &node.name };
-        let path = knob_path(&ctx).map_err(|e| IoError::Other(e.to_string()))?;
-        let ty = FileType::from_path(&path).ok_or_else(|| IoError::UnsupportedType(path.display().to_string()))?;
-        if knobs.boolean("create_directories")
-            && let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty())
-        {
-            std::fs::create_dir_all(dir).map_err(|e| file_error(dir, e))?;
-        }
-        let mut renderer = Renderer::new(script, registry);
-        let info = renderer.info(write, t)?;
-        let region = match ty {
-            FileType::Png => info.format.rect(),
-            FileType::Exr => info.bbox,
-        };
-        let image = renderer.render(write, t, region)?;
-        let opts = write_options(&ctx, ty, &info.channels);
-        write_image(&path, &image, &info.format, &opts)?;
-        log::info!("{}: wrote {}", node.name, path.display());
-        written.push(path);
+    let t = FrameTime::from_frame(frame);
+    let knobs = nukecraft_nodes::Knobs::evaluate(spec.knobs, &node.knobs, t, &script.root.format);
+    let ctx = Ctx { knobs: &knobs, root: &script.root, time: t, node_name: &node.name };
+    let path = knob_path(&ctx).map_err(|e| IoError::Other(e.to_string()))?;
+    let ty = FileType::from_path(&path).ok_or_else(|| IoError::UnsupportedType(path.display().to_string()))?;
+    if knobs.boolean("create_directories")
+        && let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(dir).map_err(|e| file_error(dir, e))?;
     }
-    Ok(written)
+    let mut renderer = Renderer::new(script, registry);
+    let info = renderer.info(write, t)?;
+    let region = match ty {
+        FileType::Png => info.format.rect(),
+        FileType::Exr => info.bbox,
+    };
+    let image = renderer.render(write, t, region)?;
+    let opts = write_options(&ctx, ty, &info.channels);
+    write_image(&path, &image, &info.format, &opts)?;
+    log::info!("{}: wrote {}", node.name, path.display());
+    Ok(Some(path))
 }
 
 fn write_options(ctx: &Ctx, ty: FileType, available: &ChannelSet) -> WriteOptions {

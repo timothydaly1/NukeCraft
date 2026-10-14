@@ -23,7 +23,7 @@ use nukecraft_nodes::Registry;
 use nukecraft_time::FrameTime;
 use serde_json::{Value, json};
 
-pub use commands::{CommandSpec, command_specs, find_command};
+pub use commands::{CommandSpec, command_specs, find_command, render_plan};
 
 /// Undo steps kept.
 const MAX_UNDO: usize = 500;

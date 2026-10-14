@@ -19,7 +19,7 @@ window sees. `nukecraft-cli mcp --bridge PORT` puts an MCP server in front of it
 | Method | Params | Result |
 |---|---|---|
 | `engine.execute` | `{command, params}` | The command's result (any engine command; see `query.commands`) |
-| `app.state` | `{}` | `{viewed, selection, frame, revision, dirty, path, busy, viewerError}` |
+| `app.state` | `{}` | `{viewed, selection, frame, revision, dirty, path, busy, viewerError, render}` (`render`: `{done, total, current}` while Render… runs in the background, else null) |
 | `app.view` | `{node}` | Views a node in the Viewer (what pressing 1 does) |
 | `ui.inspect` | `{prefix?}` | The on-screen elements whose automation id starts with `prefix`: `[{id, label, rect: [x, y, w, h]}]` |
 | `ui.click` | `{id, clicks?: 1‥3, modifiers?: ["shift", "alt", "cmd"]}` | Clicks the centre of an element (queued: it happens over the next frames) |

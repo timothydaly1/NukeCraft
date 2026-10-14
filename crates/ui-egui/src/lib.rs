@@ -17,6 +17,7 @@ mod graph;
 pub mod keys;
 mod menus;
 mod properties;
+mod render_job;
 pub mod snapshot;
 pub mod theme;
 mod viewer;
@@ -54,6 +55,10 @@ pub struct NukecraftApp {
     /// Screenshot requests waiting for eframe: (path, request id, reply).
     screenshots: Vec<(String, Value, std::sync::mpsc::Sender<Value>)>,
     pub(crate) dialogs: dialogs::Dialogs,
+    /// Render… running in the background.
+    pub(crate) render_job: Option<render_job::RenderJob>,
+    /// Wakes the window when background work finishes.
+    repaint: Option<egui::Context>,
     status: Option<Status>,
     shortcuts: Vec<(KeyboardShortcut, &'static str)>,
     title: String,
@@ -114,6 +119,8 @@ impl NukecraftApp {
             injected: Vec::new(),
             screenshots: Vec::new(),
             dialogs: dialogs::Dialogs::default(),
+            render_job: None,
+            repaint: Some(ctx.clone()),
             status: None,
             shortcuts,
             title: String::new(),
@@ -132,7 +139,22 @@ impl NukecraftApp {
 
     /// Whether work is still in flight (renders), so a headless run should keep going.
     pub fn busy(&self) -> bool {
-        self.viewer.busy()
+        self.viewer.busy() || self.render_job.is_some()
+    }
+
+    /// Starts Render… in the background for `render.execute`'s parameters (all enabled Write
+    /// nodes over the script's range by default). One job at a time.
+    pub fn start_render(&mut self, params: Value) {
+        if self.render_job.is_some() {
+            self.set_status("A render is already running", true);
+            return;
+        }
+        match nukecraft_engine::render_plan(&self.session, &params) {
+            Ok((writes, frames)) => {
+                self.render_job = Some(render_job::RenderJob::start(self.session.script.clone(), writes, frames, self.repaint.clone()));
+            }
+            Err(e) => self.set_status(e.to_string(), true),
+        }
     }
 
     /// Draws one frame.
@@ -152,6 +174,7 @@ impl NukecraftApp {
         egui::CentralPanel::no_frame().show(ui, |ui| viewer::show(self, ui));
 
         dialogs::show(self, &ctx);
+        render_job::show(self, &ctx);
         self.autosave();
         self.update_title(&ctx);
     }
@@ -208,12 +231,7 @@ impl NukecraftApp {
                 }
             }
             "root.settings" => self.dialogs.open_settings(&self.session.script.root),
-            "render.execute" => {
-                if let Some(r) = self.run("render.execute", json!({})) {
-                    let n = r["written"].as_array().map_or(0, Vec::len);
-                    self.set_status(format!("Rendered {n} files"), false);
-                }
-            }
+            "render.execute" => self.start_render(json!({})),
             "render.frame" => {
                 let Some(node) = self.viewed.and_then(|v| self.session.script.name_of(v).ok()).map(str::to_string) else {
                     self.set_status("View a node first (select it and press 1)", true);

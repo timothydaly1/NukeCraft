@@ -568,7 +568,10 @@ fn frame_of(s: &Session, p: &Value) -> Result<FrameTime> {
     Ok(params::opt_frame(p, "frame")?.unwrap_or(s.time))
 }
 
-fn render_execute(s: &mut Session, p: &Value) -> Result<Value> {
+/// What `render.execute` with these parameters renders: the Write nodes (all enabled ones by
+/// default) and the frames (`frames`, else the script's range). The desktop app renders the
+/// same plan on a background thread.
+pub fn render_plan(s: &Session, p: &Value) -> Result<(Vec<NodeId>, Vec<i64>)> {
     let writes: Vec<NodeId> = match p.get("nodes") {
         Some(_) => params::nodes(&s.script, p)?,
         None => s.script.nodes().iter().filter(|n| n.class == "Write" && !n.disabled).map(|n| n.id).collect(),
@@ -586,6 +589,11 @@ fn render_execute(s: &mut Session, p: &Value) -> Result<Value> {
             (r.first..=r.last).collect()
         }
     };
+    Ok((writes, frames))
+}
+
+fn render_execute(s: &mut Session, p: &Value) -> Result<Value> {
+    let (writes, frames) = render_plan(s, p)?;
     let (script, registry) = (&s.script, &s.registry);
     let mut written = Vec::new();
     for w in writes {

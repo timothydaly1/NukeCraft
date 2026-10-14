@@ -418,12 +418,7 @@ fn apply(app: &mut NukecraftApp, actions: Vec<Action>) {
                     app.run("node.setKnob", json!({ "node": node, "knob": knob, "value": path }));
                 }
             }
-            Action::Render(node) => {
-                if let Some(r) = app.run("render.execute", json!({ "nodes": [node] })) {
-                    let n = r["written"].as_array().map_or(0, Vec::len);
-                    app.set_status(format!("Rendered {n} files"), false);
-                }
-            }
+            Action::Render(node) => app.start_render(json!({ "nodes": [node] })),
         }
     }
 }
