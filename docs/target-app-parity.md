@@ -9,7 +9,7 @@ with Nuke yet ([fidelity/README.md](fidelity/README.md)).
 
 | Area | ≈ % | Evidence |
 |---|---:|---|
-| Node library (toolbar breadth) | 15% | 37 classes, several partial (see the catalog) |
+| Node library (toolbar breadth) | 17% | 43 classes, several partial (see the catalog) |
 | Engine model (bbox/format, channels, ROI, edge repeat, linear premultiplied float) | 60% | In place and tested; missing tiles, threads, proxy, multiview, metadata, deep |
 | Animation | 25% | Keys, four interpolations, keying animated knobs; no Curve Editor, tangents, expressions, extrapolation modes |
 | Script files | 15% | Own `.ncs` format with repairs; no `.nk` |
@@ -20,8 +20,8 @@ with Nuke yet ([fidelity/README.md](fidelity/README.md)).
 | Performance | unknown | Not measured; single-threaded |
 | Agent control (beyond Nuke) | ahead | Every command over MCP and CLI; `render_image`; the running app over a control channel and MCP bridge; the UI headless |
 
-**Ready for real work: ≈ 7%.** The app can build, animate, view and render simple comps from the
-37 nodes; real shots need the M2 node set, `.nk` exchange and measured fidelity.
+**Ready for real work: ≈ 8%.** The app can build, animate, view and render simple comps from the
+43 nodes; real shots need the M2 node set, `.nk` exchange and measured fidelity.
 
 ## How these numbers will be measured
 

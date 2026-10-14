@@ -1,6 +1,6 @@
 //! The cases. Each is a tiny graph on a 64×64 format, built from Nuke's class and knob names, and
 //! the values to measure on it. They follow the open questions in `docs/fidelity/README.md`
-//! (F1…F19); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
+//! (F1…F20); F4, F5 and F11 concern the Viewer, Edit ▸ Delete and files on disk, and stay manual.
 
 use serde_json::{Value, json};
 
@@ -70,6 +70,7 @@ pub fn cases() -> Vec<Case> {
     draw_and_mix(&mut out);
     reformat(&mut out);
     time(&mut out);
+    filters(&mut out);
     merge(&mut out);
     sources(&mut out);
     crop(&mut out);
@@ -640,6 +641,37 @@ fn time(out: &mut Vec<Case>) {
         c.samples = at(&sampled);
         out.push(c);
     }
+}
+
+/// F20: Sharpen, Erode (fast) and (filter), Glow, Median, and Blur through a mask, on a
+/// 16x16 square of (1.5, 1, 0.5, 1) at (24, 24) on black.
+fn filters(out: &mut Vec<Case>) {
+    let square =
+        || vec![constant("Sq", [1.5, 1.0, 0.5, 1.0]), NodeDef::new("S", "Crop").input(0, "Sq").knob("box", json!([24, 24, 40, 40])).knob("crop", json!(true))];
+    let points = || [span(14, 50, 32), (14..32).map(|y| (32, y)).collect()].concat();
+    for (id, class, knobs) in [
+        ("sharpen.default", "Sharpen", json!({})),
+        ("sharpen.strong", "Sharpen", json!({ "amount": 2, "size": 6 })),
+        ("erode_fast.grow", "Dilate", json!({ "size": 2 })),
+        ("erode_fast.shrink", "Dilate", json!({ "size": -1 })),
+        ("erode_fast.xy", "Dilate", json!({ "size": [3, 1] })),
+        ("erode_filter.default", "FilterErode", json!({})),
+        ("erode_filter.half", "FilterErode", json!({ "size": 0.5 })),
+        ("erode_filter.grow", "FilterErode", json!({ "size": -1.5 })),
+        ("glow.default", "Glow", json!({})),
+        ("glow.tolerance", "Glow", json!({ "tolerance": 0.75, "brightness": 2 })),
+        ("glow.effect_only", "Glow", json!({ "effect_only": true, "saturation": 0.25, "size": 6 })),
+        ("median.3", "Median", json!({ "size": 3 })),
+        ("median.5", "Median", json!({ "size": 5 })),
+    ] {
+        let mut nodes = square();
+        nodes.push(with_knobs(NodeDef::new("N", class).input(0, "S"), knobs));
+        out.push(case(id, "F20", "A 16x16 square of (1.5, 1, 0.5, 1) on black through a filter", nodes, vec![sample("N", points(), &RGBA)]));
+    }
+    let mut nodes = square();
+    nodes.push(hramp("M", [1.0, 1.0, 1.0, 1.0]));
+    nodes.push(NodeDef::new("N", "Blur").input(0, "S").input(1, "M").knob("size", json!(8)).knob("maskChannelInput", json!("rgba.alpha")));
+    out.push(case("blur.mask", "F20", "Blur 8 through an alpha ramp mask", nodes, vec![sample("N", points(), &RGBA)]));
 }
 
 /// F8: every Merge operation, in range and out of range.

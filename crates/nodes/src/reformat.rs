@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(info.bbox, IRect::new(0, 0, 64, 32));
         let (info, _) = run("Reformat", vec![("type", text("scale")), ("pbb", Value::Bool(true))], vec![wide], None);
         assert!(info.bbox.x0 < -10);
-        let (info, _) = run("Reformat", vec![("format", text("HD_1080"))], vec![coords()], None);
+        let (info, _) = run("Reformat", vec![("format", text("HD_1080"))], vec![coords()], Some(IRect::new(0, 0, 8, 8)));
         assert_eq!(info.format, Format::named("HD_1080").unwrap());
     }
 

@@ -8,7 +8,7 @@
 use nukecraft_geom::IRect;
 use nukecraft_raster::Image;
 
-use crate::{Ctx, ImageInfo, Input, InputSpec, KnobDefault, KnobKind, KnobSpec, NodeSpec, Result, input_image, input_info, mix};
+use crate::{Ctx, ImageInfo, Input, KnobDefault, KnobKind, KnobSpec, NodeSpec, Result, input_image, input_info};
 
 /// The largest blur size, in pixels.
 const MAX_SIZE: f64 = 4096.0;
@@ -21,7 +21,7 @@ pub fn specs() -> Vec<NodeSpec> {
         category: "Filter",
         shortcut: Some("B"),
         help: "Blurs the image by `size` pixels.",
-        inputs: &[InputSpec { name: "Source", mask: false }],
+        inputs: crate::color_nodes::COLOR_INPUTS,
         extra_inputs: false,
         knobs: &[
             KnobSpec {
@@ -52,13 +52,9 @@ pub fn specs() -> Vec<NodeSpec> {
                 default: KnobDefault::Bool(true),
                 help: "Keep the output bbox inside the format.",
             },
-            KnobSpec {
-                name: "mix",
-                label: "mix",
-                kind: KnobKind::Float,
-                default: KnobDefault::Number(1.0),
-                help: "Blend between the input (0) and the result (1).",
-            },
+            crate::color_nodes::MASK_CHANNEL,
+            crate::color_nodes::INVERT_MASK,
+            crate::color_nodes::MIX,
         ],
         info: blur_info,
         request: blur_request,
@@ -68,7 +64,7 @@ pub fn specs() -> Vec<NodeSpec> {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Shape {
+pub(crate) enum Shape {
     Box,
     Triangle,
     Quadratic,
@@ -91,7 +87,7 @@ fn sizes(ctx: &Ctx) -> (f64, f64) {
 }
 
 /// Normalised weights for offsets `-r..=r` (r = returned radius).
-fn kernel(shape: Shape, size: f64) -> (i32, Vec<f32>) {
+pub(crate) fn kernel(shape: Shape, size: f64) -> (i32, Vec<f32>) {
     if size < 1e-3 {
         return (0, vec![1.0]);
     }
@@ -155,46 +151,112 @@ fn blur_engine(ctx: &Ctx, info: &ImageInfo, inputs: &[Option<Input>], region: IR
     let src = &inp.image;
     let (sx, sy) = sizes(ctx);
     let s = shape(ctx);
-    let (rx, kx) = kernel(s, sx);
-    let (ry, ky) = kernel(s, sy);
+    let (kx, ky) = (kernel(s, sx), kernel(s, sy));
     let selected = ctx.channels_knob("channels", &info.channels);
-    let m = ctx.knobs.float("mix") as f32;
-    // Horizontal pass over the rows the vertical pass needs.
-    let rows = IRect::new(region.x0, region.y0.saturating_sub(ry), region.x1, region.y1.saturating_add(ry));
     for (oi, c) in info.channels.iter().enumerate() {
         let Some(si) = src.channels().index_of(c) else { continue };
         if !selected.contains(c) {
-            for y in region.y0..region.y1 {
-                for x in region.x0..region.x1 {
-                    out.set_at(oi, x, y, src.get_at(si, x, y));
-                }
-            }
+            copy_plane(src, si, &mut out, oi, region);
             continue;
         }
-        let w = rows.width() as usize;
-        let mut tmp = vec![0.0f32; rows.area() as usize];
-        for (row, y) in (rows.y0..rows.y1).enumerate() {
-            for (col, x) in (region.x0..region.x1).enumerate() {
-                let mut acc = 0.0f32;
-                for (k, d) in kx.iter().zip(-rx..=rx) {
-                    acc += k * src.get_at(si, x.saturating_add(d), y);
-                }
-                if let Some(t) = tmp.get_mut(row * w + col) {
-                    *t = acc;
-                }
-            }
+        let blurred = separable(src, si, region, &kx, &ky);
+        put_plane(&mut out, oi, region, &blurred);
+    }
+    Ok(crate::finish_masked(ctx, inputs, 1, src, out, &selected))
+}
+
+/// Copies a channel of `src` (edge-repeating) into plane `oi` of `out` over `region`.
+pub(crate) fn copy_plane(src: &Image, si: usize, out: &mut Image, oi: usize, region: IRect) {
+    for y in region.y0..region.y1 {
+        for x in region.x0..region.x1 {
+            out.set_at(oi, x, y, src.get_at(si, x, y));
         }
-        for (row, y) in (region.y0..region.y1).enumerate() {
-            for (col, x) in (region.x0..region.x1).enumerate() {
-                let mut acc = 0.0f32;
-                for (j, k) in ky.iter().enumerate() {
-                    acc += k * tmp.get((row + j) * w + col).copied().unwrap_or(0.0);
-                }
-                out.set_at(oi, x, y, mix(src.get_at(si, x, y), acc, m));
+    }
+}
+
+/// Writes row-major values over `region` into plane `oi` of `out`.
+pub(crate) fn put_plane(out: &mut Image, oi: usize, region: IRect, values: &[f32]) {
+    let mut i = 0usize;
+    for y in region.y0..region.y1 {
+        for x in region.x0..region.x1 {
+            out.set_at(oi, x, y, values.get(i).copied().unwrap_or(0.0));
+            i += 1;
+        }
+    }
+}
+
+/// Channel `si` of `src` convolved with `kx` along x and `ky` along y, over `region` (row-major,
+/// bottom-up). Reads outside `src` repeat its edge; the taps that fall there are summed as one
+/// weight, so the cost follows the image, not the kernel, however large the kernel is.
+pub(crate) fn separable(src: &Image, si: usize, region: IRect, kx: &(i32, Vec<f32>), ky: &(i32, Vec<f32>)) -> Vec<f32> {
+    let sb = src.bbox();
+    if sb.is_empty() || region.is_empty() {
+        return vec![0.0; region.area() as usize];
+    }
+    let (cx, cy) = (Taps::new(kx), Taps::new(ky));
+    // Horizontal pass, only over the source's rows: rows outside it repeat its edge rows.
+    let (ry0, ry1) = (sb.y0, sb.y1);
+    let w = region.width() as usize;
+    let mut tmp = vec![0.0f32; (ry1 - ry0) as usize * w];
+    for (row, y) in (ry0..ry1).enumerate() {
+        for (col, x) in (region.x0..region.x1).enumerate() {
+            if let Some(t) = tmp.get_mut(row * w + col) {
+                *t = cx.apply(|p| src.get_at(si, p, y), sb.x0, sb.x1, x);
             }
         }
     }
-    Ok(out)
+    let mut out = Vec::with_capacity(region.area() as usize);
+    for y in region.y0..region.y1 {
+        for col in 0..w {
+            out.push(cy.apply(|p| tmp.get((p - ry0) as usize * w + col).copied().unwrap_or(0.0), ry0, ry1, y));
+        }
+    }
+    out
+}
+
+/// A normalised kernel with its running sums, for convolving lines whose ends repeat.
+struct Taps<'a> {
+    r: i32,
+    k: &'a [f32],
+    /// `cum[i]`: the sum of the first `i` weights.
+    cum: Vec<f32>,
+}
+
+impl<'a> Taps<'a> {
+    fn new(kernel: &'a (i32, Vec<f32>)) -> Taps<'a> {
+        let mut cum = Vec::with_capacity(kernel.1.len() + 1);
+        let mut acc = 0.0f32;
+        cum.push(0.0);
+        for w in &kernel.1 {
+            acc += w;
+            cum.push(acc);
+        }
+        Taps { r: kernel.0, k: &kernel.1, cum }
+    }
+
+    /// The kernel centred on `c` over a line known on `lo..hi` (non-empty) and repeating its
+    /// end values beyond.
+    fn apply(&self, get: impl Fn(i32) -> f32, lo: i32, hi: i32, c: i32) -> f32 {
+        let n = self.k.len() as i64;
+        let start = c as i64 - self.r as i64;
+        // Tap indices whose positions fall inside lo..hi.
+        let first = (lo as i64 - start).clamp(0, n) as usize;
+        let last = (hi as i64 - start).clamp(0, n) as usize;
+        let total = self.cum.last().copied().unwrap_or(0.0);
+        let left = self.cum.get(first).copied().unwrap_or(0.0);
+        let right = total - self.cum.get(last).copied().unwrap_or(total);
+        let mut acc = 0.0f32;
+        if left != 0.0 {
+            acc += left * get(lo);
+        }
+        if right != 0.0 {
+            acc += right * get(hi - 1);
+        }
+        for (i, w) in self.k.iter().enumerate().take(last).skip(first) {
+            acc += w * get((start + i as i64) as i32);
+        }
+        acc
+    }
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ mod color_math;
 mod color_nodes;
 mod draw;
 pub mod filter;
+mod filters;
 mod image_nodes;
 pub mod knobs;
 mod merge;
@@ -209,6 +210,7 @@ impl Registry {
             .chain(transform::specs())
             .chain(reformat::specs())
             .chain(blur::specs())
+            .chain(filters::specs())
             .chain(time_nodes::specs())
             .chain(other_nodes::specs())
         {
@@ -280,6 +282,33 @@ pub fn mask_factors_by(ctx: &Ctx, inputs: &[Option<Input>], index: usize, region
         }
     }
     Some(out)
+}
+
+/// Blends `out` (a filter's result over its bbox region) back towards the source by the mask (input
+/// `mask_input`, through `maskChannelInput`/`invert_mask`) times `mix`, in the `selected`
+/// channels; other channels are left as they are in `out`.
+pub(crate) fn finish_masked(ctx: &Ctx, inputs: &[Option<Input>], mask_input: usize, src: &Image, mut out: Image, selected: &ChannelSet) -> Image {
+    let region = out.bbox();
+    let m = ctx.knobs.float("mix") as f32;
+    let mask = mask_factors(ctx, inputs, mask_input, region);
+    if mask.is_none() && m >= 1.0 {
+        return out;
+    }
+    let chans: Vec<(usize, usize)> =
+        out.channels().iter().enumerate().filter(|(_, c)| selected.contains(c)).filter_map(|(oi, c)| src.channels().index_of(c).map(|si| (oi, si))).collect();
+    let mut i = 0usize;
+    for y in region.y0..region.y1 {
+        for x in region.x0..region.x1 {
+            let k = mask.as_ref().map_or(1.0, |mk| mk.get(i).copied().unwrap_or(0.0)) * m;
+            let k = if k.is_nan() { 0.0 } else { k };
+            i += 1;
+            for &(oi, si) in &chans {
+                let v = out.get_at(oi, x, y);
+                out.set_at(oi, x, y, mix(src.get_at(si, x, y), v, k));
+            }
+        }
+    }
+    out
 }
 
 /// `mix` blend of an original and a processed value.
@@ -374,6 +403,7 @@ mod tests {
             + transform::specs().len()
             + reformat::specs().len()
             + blur::specs().len()
+            + filters::specs().len()
             + time_nodes::specs().len()
             + other_nodes::specs().len();
         assert_eq!(r.iter().count(), n, "a built-in class name or alias collides");

@@ -67,11 +67,16 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Blur | ✅ | Box, triangle, quadratic, gaussian; size mapping unverified (F3) |
+| Blur | ✅ | Box, triangle, quadratic, gaussian, mask input; size mapping unverified (F3) |
 | Defocus, ZDefocus, Convolve | — | [M2]/later |
-| Sharpen, Soften, EdgeDetect, Emboss, Median | — | [M2] |
-| Erode (FilterErode), Dilate, EdgeBlur | — | [M2] |
-| Glow, Bloom | — | [M2] |
+| Sharpen | ◐ | Unsharp mask with a gaussian of `size`; no `minimum`/`maximum` clamps (F20) |
+| Median | ◐ | Square window of `size` (F20: size meaning unverified) |
+| Soften, EdgeDetect, Emboss | — | [M2] |
+| Erode (fast) (Dilate) | ✅ | Whole pixels per axis; positive grows |
+| Erode (filter) (FilterErode) | ◐ | Fractional sizes blend whole-pixel results; no `filter` choice (F20) |
+| EdgeBlur | — | |
+| Glow | ◐ | Tolerance, brightness, saturation, size, effect only; no `width` channel (F20) |
+| Bloom | — | |
 | DirBlur, MotionBlur, VectorBlur | — | [M6] |
 | Denoise, Bilateral | — | |
 
@@ -125,6 +130,7 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 | Node | Status | Notes |
 |---|---|---|
 | Dot | ✅ | |
-| NoOp, Backdrop, StickyNote | — | [M2] |
+| NoOp | ✅ | |
+| Backdrop, StickyNote | — | [M2] (Node Graph items) |
 | Group, Input, Output, Precomp, LiveGroup | — | [M2]/[M10] |
 | BlinkScript-style kernels | — | [M10] (WGSL or WebAssembly) |
