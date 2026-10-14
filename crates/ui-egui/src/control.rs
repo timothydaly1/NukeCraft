@@ -194,6 +194,26 @@ impl NukecraftApp {
                 }
                 Ok(json!({}))
             }
+            "ui.drag" => {
+                let target = p["from"].as_str().ok_or("`from` is required")?;
+                let from = self.automation.center(target).ok_or_else(|| format!("no UI element `{target}` (ui.inspect lists them)"))?;
+                let to = match (p["to"].as_str(), p["by"].as_array()) {
+                    (Some(id), _) => self.automation.center(id).ok_or_else(|| format!("no UI element `{id}`"))?,
+                    (None, Some(by)) => {
+                        let d = |i: usize| by.get(i).and_then(Value::as_f64).filter(|v| v.is_finite()).unwrap_or(0.0).clamp(-1e5, 1e5) as f32;
+                        from + egui::vec2(d(0), d(1))
+                    }
+                    (None, None) => return Err("`to` (an element id) or `by` ([dx, dy] in points) is required".into()),
+                };
+                let m = modifiers(p);
+                self.injected.push(vec![Event::PointerMoved(from)]);
+                self.injected.push(vec![Event::PointerButton { pos: from, button: PointerButton::Primary, pressed: true, modifiers: m }]);
+                for i in 1..=8 {
+                    self.injected.push(vec![Event::PointerMoved(from + (to - from) * (i as f32 / 8.0))]);
+                }
+                self.injected.push(vec![Event::PointerButton { pos: to, button: PointerButton::Primary, pressed: false, modifiers: m }]);
+                Ok(json!({}))
+            }
             "ui.key" => {
                 let key = p["key"].as_str().and_then(Key::from_name).ok_or("`key` is missing or unknown")?;
                 let m = modifiers(p);
@@ -206,7 +226,9 @@ impl NukecraftApp {
                 self.injected.push(vec![Event::Text(text.to_string())]);
                 Ok(json!({}))
             }
-            other => Err(format!("unknown method `{other}` (engine.execute, app.state, app.view, ui.inspect, ui.click, ui.key, ui.text, ui.screenshot)")),
+            other => {
+                Err(format!("unknown method `{other}` (engine.execute, app.state, app.view, ui.inspect, ui.click, ui.drag, ui.key, ui.text, ui.screenshot)"))
+            }
         }
     }
 

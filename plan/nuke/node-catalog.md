@@ -104,12 +104,12 @@ Status: ✅ implemented (pending fidelity checks) · ◐ partial · — not star
 
 | Node | Status | Notes |
 |---|---|---|
-| Transform | ✅ | Impulse + six cubics; no motion blur, Notch/Lanczos/Sinc, on-viewer handle [M1/M6] |
+| Transform | ✅ | Impulse + six cubics; on-viewer translate and rotate handles; no motion blur, Notch/Lanczos/Sinc, scale/skew handles [M6] |
 | Crop | ✅ | No softness |
 | Reformat | ◐ | To format, to box, scale; six resize types, centre, flip/flop/turn, filter, black outside, preserve bbox; no `clamp` (F18) |
 | Mirror (Mirror2) | ✅ | flip, flop (exact) |
 | Position | ✅ | Whole pixels (F18: rounding unverified) |
-| CornerPin2D | ◐ | Four corners, enables, invert, filter; no extra matrix, motion blur or on-viewer handles |
+| CornerPin2D | ◐ | Four corners (dragged on the Viewer), enables, invert, filter; no extra matrix or motion blur |
 | Tile | — | |
 | Tracker, PlanarTracker, CameraTracker | — | [M6] |
 | STMap, IDistort, SplineWarp, GridWarp, LensDistortion | — | [M6] |

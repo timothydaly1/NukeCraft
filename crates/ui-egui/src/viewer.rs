@@ -78,6 +78,8 @@ pub struct ViewerState {
     pub playing: bool,
     last_step: f64,
     readout: Option<String>,
+    /// An on-viewer handle being dragged.
+    pub(crate) handle_drag: Option<crate::handles::Drag>,
 }
 
 impl ViewerState {
@@ -102,6 +104,7 @@ impl ViewerState {
             playing: false,
             last_step: 0.0,
             readout: None,
+            handle_drag: None,
         }
     }
 
@@ -115,6 +118,14 @@ impl ViewerState {
     /// A render is in flight.
     pub fn busy(&self) -> bool {
         self.worker.as_ref().is_some_and(Worker::busy)
+    }
+
+    pub fn zoom(&self) -> f32 {
+        self.zoom
+    }
+
+    pub fn pan(&self) -> Vec2 {
+        self.pan
     }
 
     fn insert(&mut self, key: FrameKey, frame: Arc<Frame>) {
@@ -268,6 +279,10 @@ fn image_ui(app: &mut NukecraftApp, ui: &mut egui::Ui, area: Rect) {
         app.viewer.fitted_format = Some((fmt.0, fmt.1));
     }
 
+    // Handles take the pointer first; elsewhere a drag pans.
+    let mapping = format.map(|fmt| crate::handles::Mapping { rect: image_rect(app, area, fmt), size: (fmt.0 as f32, fmt.1 as f32) });
+    let on_handle = mapping.is_some_and(|m| crate::handles::interact(app, ui, &resp, m));
+
     // Navigation.
     if let Some(p) = resp.hover_pos() {
         let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
@@ -280,7 +295,7 @@ fn image_ui(app: &mut NukecraftApp, ui: &mut egui::Ui, area: Rect) {
             v.zoom = new_zoom;
         }
     }
-    if resp.dragged() {
+    if resp.dragged() && !on_handle {
         app.viewer.pan += resp.drag_delta();
     }
     if resp.hovered() && !ui.ctx().text_edit_focused() {
@@ -328,6 +343,9 @@ fn image_ui(app: &mut NukecraftApp, ui: &mut egui::Ui, area: Rect) {
         let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
         painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, theme::BBOX_LINE), 6.0, 4.0));
     }
+
+    let map = crate::handles::Mapping { rect: img_rect, size: (fmt.0 as f32, fmt.1 as f32) };
+    crate::handles::draw(app, &painter, map, resp.hover_pos());
 
     // Pixel readout under the pointer.
     app.viewer.readout = resp.hover_pos().map(|p| {

@@ -23,6 +23,7 @@ window sees. `nukecraft-cli mcp --bridge PORT` puts an MCP server in front of it
 | `app.view` | `{node}` | Views a node in the Viewer (what pressing 1 does) |
 | `ui.inspect` | `{prefix?}` | The on-screen elements whose automation id starts with `prefix`: `[{id, label, rect: [x, y, w, h]}]` |
 | `ui.click` | `{id, clicks?: 1‥3, modifiers?: ["shift", "alt", "cmd"]}` | Clicks the centre of an element (queued: it happens over the next frames) |
+| `ui.drag` | `{from, to? \| by?: [dx, dy], modifiers?}` | Drags from an element to another element, or by an offset in points (handles, nodes, sliders) |
 | `ui.key` | `{key, modifiers?}` | Presses and releases a key (egui key names: `B`, `Tab`, `Delete`, `ArrowLeft`…) |
 | `ui.text` | `{text}` | Types text into the focused field |
 | `ui.screenshot` | `{path}` | Writes a PNG of the window (answered once the window has drawn it) |
@@ -38,6 +39,8 @@ Every interactive element registers a stable id each frame. The main families:
 | `graph.node.<Name>`, `.output`, `.input.<i>` | A node, its output, the grab handle of input `i` |
 | `graph.search`, `graph.search.item.<Class>` | The Tab search field and its results |
 | `viewer.image`, `viewer.channel`, `viewer.exposure`, `viewer.gamma`, `viewer.fit` | The Viewer and its toolbar |
+| `viewer.handle.<Name>.<knob>` (box knobs: `.0`..`.3` corners from the bottom-left, `.move`) | On-viewer handles of nodes whose properties are open; drag them with `ui.drag` |
+| `render.progress`, `render.cancel` | The background render's progress bar and Cancel button |
 | `viewer.first`, `.prev`, `.play`, `.next`, `.last`, `.frame`, `.slider` | The timeline |
 | `props.<Name>.<knob>` (`.1`, `.2`… for further components), `.key`, `.browse` | Knob widgets and their key buttons |
 | `props.<Name>.name`, `.disable`, `.close`, `.render` | A node's panel header (and Write's Render button) |

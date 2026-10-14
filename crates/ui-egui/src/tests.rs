@@ -276,6 +276,59 @@ mod viewer {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    fn numbers(h: &Headless, node: &str, knob: &str) -> Vec<f64> {
+        let n = h.app.session.script.by_name(node).unwrap();
+        let v = n.knobs.get(knob).unwrap().eval(h.app.session.time);
+        v.as_numbers().unwrap().to_vec()
+    }
+
+    #[test]
+    fn handles_drag_knobs_in_one_undo_step() {
+        let mut h = demo();
+        h.click("graph.node.Transform1", 2, Modifiers::NONE).unwrap();
+        h.frames(2);
+        let pan = h.app.viewer_pan();
+        let from = h.app.automation.center("viewer.handle.Transform1.translate").expect("translate handle");
+        h.drag_at(from, from + egui::vec2(40.0, -20.0), egui::PointerButton::Primary, Modifiers::NONE);
+        let t = numbers(&h, "Transform1", "translate");
+        let zoom = h.app.viewer_zoom() as f64;
+        assert!((t[0] - (192.0 + 40.0 / zoom)).abs() < 0.5 && (t[1] - (52.0 + 20.0 / zoom)).abs() < 0.5, "moved right and up: {t:?}");
+        assert_eq!(h.app.viewer_pan(), pan, "the Viewer did not pan");
+        assert_eq!(h.app.session.history(), ["Move translate"]);
+        // Box corners and the box as a whole.
+        h.app.session.execute("node.create", &json!({ "class": "Rectangle", "name": "Rect1", "knobs": { "area": [100, 100, 200, 150] } })).unwrap();
+        h.app.open_properties(h.app.session.script.id_of("Rect1").unwrap());
+        h.frames(2);
+        let c = h.app.automation.center("viewer.handle.Rect1.area.2").expect("top-right corner");
+        h.drag_at(c, c + egui::vec2(-10.0, 0.0), egui::PointerButton::Primary, Modifiers::NONE);
+        let a = numbers(&h, "Rect1", "area");
+        assert!(a[2] < 195.0 && a[0] == 100.0 && a[3] == 150.0, "only r moved: {a:?}");
+        let m = h.app.automation.center("viewer.handle.Rect1.area.move").expect("centre");
+        h.drag_at(m, m + egui::vec2(0.0, 30.0), egui::PointerButton::Primary, Modifiers::NONE);
+        let b = numbers(&h, "Rect1", "area");
+        assert!(b[1] < 100.0 && (b[3] - b[1] - 50.0).abs() < 1e-6, "moved down, same height: {b:?}");
+        h.key(egui::Key::Z, Modifiers::COMMAND);
+        assert_eq!(numbers(&h, "Rect1", "area"), a, "one undo step per drag");
+    }
+
+    #[test]
+    fn rotating_by_the_arm_keys_an_animated_knob() {
+        let mut h = demo();
+        h.app.session.execute("time.goto", &json!({ "frame": 6 })).unwrap();
+        h.click("graph.node.Transform1", 2, Modifiers::NONE).unwrap();
+        h.frames(2);
+        let before = numbers(&h, "Transform1", "rotate")[0];
+        let pivot = h.app.automation.center("viewer.handle.Transform1.translate").unwrap();
+        let arm = h.app.automation.center("viewer.handle.Transform1.rotate").unwrap();
+        // Swing the arm a quarter turn counter-clockwise about the pivot (screen y is down).
+        let r = arm - pivot;
+        h.drag_at(arm, pivot + egui::vec2(r.y, -r.x), egui::PointerButton::Primary, Modifiers::NONE);
+        let after = numbers(&h, "Transform1", "rotate")[0];
+        assert!((after - before - 90.0).abs() < 2.0, "{before} -> {after}");
+        let n = h.app.session.script.by_name("Transform1").unwrap();
+        assert!(n.knobs.get("rotate").unwrap().is_animated(), "still animated: a key was set at frame 6");
+    }
+
     #[test]
     fn render_errors_are_shown_not_fatal() {
         let mut h = Headless::new(Session::new(), Vec2::new(1024.0, 700.0), 1.0);
@@ -406,5 +459,34 @@ mod control {
         assert_eq!(e["result"]["viewed"], "Blur2");
         h.frames(8);
         assert_eq!(h.app.selected_names(), ["Merge1"], "the injected click selected Merge1");
+    }
+
+    #[test]
+    fn drags_move_handles() {
+        let mut h = demo();
+        h.click("graph.node.Transform1", 2, Modifiers::NONE).unwrap();
+        h.frames(2);
+        let ctx = h.ctx().clone();
+        let port = h.app.start_control(&ctx, 0).unwrap();
+        let client = std::thread::spawn(move || {
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut out = stream;
+            writeln!(out, "{}", json!({ "id": 1, "method": "ui.drag", "params": { "from": "viewer.handle.Transform1.translate", "by": [30, 0] } })).unwrap();
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            serde_json::from_str::<Value>(&line).unwrap()
+        });
+        let start = std::time::Instant::now();
+        while !client.is_finished() && start.elapsed() < Duration::from_secs(30) {
+            h.frame();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(client.join().unwrap()["result"], json!({}));
+        h.frames(14);
+        let n = h.app.session.script.by_name("Transform1").unwrap();
+        let t = n.knobs.get("translate").unwrap().eval(h.app.session.time);
+        assert!(t.as_numbers().unwrap()[0] > 192.0, "dragged right: {t:?}");
+        assert_eq!(h.app.session.history(), ["Move translate"]);
     }
 }

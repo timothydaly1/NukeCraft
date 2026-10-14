@@ -6,11 +6,10 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** M2.8 on-viewer handles (Transform, CornerPin, Rectangle/Radial, Ramp, Crop), then
-  M2.9 the Curve Editor; then the rest of M2 (Roto, Group, Backdrop, ColorBars, CheckerBoard's
+- **Next task:** M2.9 the Curve Editor; then the rest of M2 (Roto, Group, Backdrop, ColorBars, CheckerBoard's
   colours and lines) and the other G1 follow-ups in `docs/gaps.md`. When the oracle arrives,
   fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (152 tests, including headless UI and fidelity tests).
+- **Gate:** `cargo xtask ci` green (155 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -19,6 +18,9 @@
 
 ## Recently done
 
+- M2.8: on-viewer handles for the nodes whose properties are open: Transform (translate, rotation
+  arm), CornerPin2D (to1..4), Rectangle, Radial, Crop (box corners and centre), Ramp (p0, p1); one
+  undo step per drag, animated knobs keyed at the current frame; `ui.drag` on the control channel.
 - M2.7: Render… and a Write's Render button run in the background (progress window, Cancel; the
   same plan as `render.execute`); `app.state` reports the progress.
 - M2.6: Sharpen, Erode (fast) and (filter), Glow, Median, NoOp; Blur gains a mask input; blurs and

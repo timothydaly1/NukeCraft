@@ -14,6 +14,7 @@ pub mod automation;
 pub mod control;
 mod dialogs;
 mod graph;
+mod handles;
 pub mod keys;
 mod menus;
 mod properties;
@@ -135,6 +136,15 @@ impl NukecraftApp {
     /// The Viewer's error for what it is showing, if rendering it failed.
     pub fn viewer_error(&self) -> Option<String> {
         self.viewer.current_error(self)
+    }
+
+    /// The Viewer's zoom (screen points per image pixel) and pan, for tests and tools.
+    pub fn viewer_zoom(&self) -> f32 {
+        self.viewer.zoom()
+    }
+
+    pub fn viewer_pan(&self) -> egui::Vec2 {
+        self.viewer.pan()
     }
 
     /// Whether work is still in flight (renders), so a headless run should keep going.
