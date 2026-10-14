@@ -12,6 +12,7 @@
 
 pub mod automation;
 pub mod control;
+mod curves;
 mod dialogs;
 mod graph;
 mod handles;
@@ -48,6 +49,9 @@ pub struct NukecraftApp {
     /// Nodes whose properties are open, most recent first.
     pub(crate) open_props: Vec<NodeId>,
     pub(crate) graph: graph::GraphState,
+    pub(crate) curves: curves::CurveState,
+    /// Which panel the bottom pane shows.
+    pub(crate) bottom: BottomTab,
     pub(crate) viewer: viewer::ViewerState,
     pub(crate) props: properties::PropsState,
     control: Option<control::ControlServer>,
@@ -66,6 +70,13 @@ pub struct NukecraftApp {
     allow_close: bool,
     last_autosave: f64,
     now: f64,
+}
+
+/// The panels of the bottom pane, as Nuke's tabs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BottomTab {
+    NodeGraph,
+    CurveEditor,
 }
 
 struct Status {
@@ -114,6 +125,8 @@ impl NukecraftApp {
             viewed: None,
             open_props: Vec::new(),
             graph: graph::GraphState::default(),
+            curves: curves::CurveState::default(),
+            bottom: BottomTab::NodeGraph,
             viewer: viewer::ViewerState::new(ctx),
             props: properties::PropsState::default(),
             control: None,
@@ -145,6 +158,11 @@ impl NukecraftApp {
 
     pub fn viewer_pan(&self) -> egui::Vec2 {
         self.viewer.pan()
+    }
+
+    /// How many keys the Curve Editor has selected.
+    pub fn curves_selected(&self) -> usize {
+        self.curves.selected_count()
     }
 
     /// Whether work is still in flight (renders), so a headless run should keep going.
@@ -180,13 +198,44 @@ impl NukecraftApp {
         egui::Panel::top("menu").show(ui, |ui| menus::menu_bar(self, ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::right("properties").resizable(true).default_size(400.0).min_size(260.0).show(ui, |ui| properties::show(self, ui));
-        egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).frame(egui::Frame::NONE).show(ui, |ui| graph::show(self, ui));
+        egui::Panel::bottom("node_graph").resizable(true).default_size(380.0).min_size(120.0).frame(egui::Frame::NONE).show(ui, |ui| self.bottom_ui(ui));
         egui::CentralPanel::no_frame().show(ui, |ui| viewer::show(self, ui));
 
         dialogs::show(self, &ctx);
         render_job::show(self, &ctx);
         self.autosave();
         self.update_title(&ctx);
+    }
+
+    /// The bottom pane: a tab strip, then the Node Graph or the Curve Editor.
+    fn bottom_ui(&mut self, ui: &mut egui::Ui) {
+        let full = ui.max_rect();
+        let strip = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 22.0));
+        ui.painter().rect_filled(strip, 0.0, theme::PANEL_DARK);
+        let mut child =
+            ui.new_child(egui::UiBuilder::new().max_rect(strip.shrink2(egui::vec2(6.0, 1.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        for (tab, label, id) in [(BottomTab::NodeGraph, "Node Graph", "tab.nodeGraph"), (BottomTab::CurveEditor, "Curve Editor", "tab.curveEditor")] {
+            let r = child.selectable_label(self.bottom == tab, label);
+            if r.clicked() {
+                self.bottom = tab;
+            }
+            self.automation.add(id, r.rect, label);
+        }
+        let body = egui::Rect::from_min_max(egui::pos2(full.left(), strip.bottom()), full.max);
+        let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body));
+        match self.bottom {
+            BottomTab::NodeGraph => {
+                self.curves.set_rect(None);
+                graph::show(self, &mut body_ui);
+            }
+            BottomTab::CurveEditor => {
+                // The Node Graph isn't under the pointer while hidden.
+                self.graph.rect = None;
+                curves::show(self, &mut body_ui);
+            }
+        }
+        // The panel keeps the size it was given (it is sized by what it holds).
+        ui.expand_to_include_rect(full);
     }
 
     /// Runs an engine command; failures go to the status bar. Returns the result on success.
@@ -365,10 +414,12 @@ impl NukecraftApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let typing = ctx.text_edit_focused();
+        // Bare keys go to the panel under the pointer: over the Curve Editor, Delete deletes keys.
+        let over_curves = ctx.input(|i| i.pointer.hover_pos()).zip(self.curves.rect()).is_some_and(|(p, r)| r.contains(p));
         let mut fired = None;
         ctx.input_mut(|i| {
             for (sc, id) in &self.shortcuts {
-                if typing && keys::is_bare(sc) {
+                if (typing || over_curves) && keys::is_bare(sc) {
                     continue;
                 }
                 if i.consume_shortcut(sc) {

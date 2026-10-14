@@ -415,6 +415,76 @@ mod properties {
     }
 }
 
+mod curves {
+    use super::*;
+    use egui::{Key, PointerButton};
+    use nukecraft_curve::Interp;
+    use serde_json::json;
+
+    /// The demo with translate.y keyed at 1, 12 and 24, Transform1's properties open and the
+    /// Curve Editor showing.
+    fn curves() -> Headless {
+        let mut h = demo();
+        let keys = json!([{ "frame": 1, "value": 40 }, { "frame": 12, "value": 80 }, { "frame": 24, "value": 20 }]);
+        h.app.session.execute("node.editKeys", &json!({ "node": "Transform1", "knob": "translate", "component": 1, "keys": keys })).unwrap();
+        h.app.session.clear_history();
+        h.click("graph.node.Transform1", 2, Modifiers::NONE).unwrap();
+        h.click("tab.curveEditor", 1, Modifiers::NONE).unwrap();
+        h.frames(2);
+        h
+    }
+
+    fn keys(h: &Headless) -> Vec<(f64, f64, Interp)> {
+        let n = h.app.session.script.by_name("Transform1").unwrap();
+        match n.knobs.get("translate").unwrap().components().unwrap()[1] {
+            nukecraft_graph::Anim::Curve { curve } => curve.keys().iter().map(|k| (k.time.as_f64(), k.value, k.interp)).collect(),
+            nukecraft_graph::Anim::Static(_) => Vec::new(),
+        }
+    }
+
+    #[test]
+    fn dragging_a_key_moves_it_by_whole_frames() {
+        let mut h = curves();
+        let k = h.app.automation.center("curves.key.Transform1.translate.1.12").expect("the key at frame 12");
+        let k1 = h.app.automation.center("curves.key.Transform1.translate.1.1").unwrap();
+        let k24 = h.app.automation.center("curves.key.Transform1.translate.1.24").unwrap();
+        // About three frames right and 10 up in value.
+        let px_per_frame = (k24.x - k1.x) / 23.0;
+        let px_per_value = (k1.y - k.y) / 40.0;
+        h.drag_at(k, k + egui::vec2(3.2 * px_per_frame, -10.0 * px_per_value), PointerButton::Primary, Modifiers::NONE);
+        let ks = keys(&h);
+        assert_eq!(ks.len(), 3);
+        assert_eq!(ks[1].0, 15.0, "snapped to a whole frame: {ks:?}");
+        assert!((ks[1].1 - 90.0).abs() < 0.5, "{ks:?}");
+        assert_eq!(h.app.session.history(), ["Move Keys"]);
+        h.key(Key::Z, Modifiers::COMMAND);
+        assert_eq!(keys(&h)[1].0, 12.0);
+    }
+
+    #[test]
+    fn box_select_set_interpolation_and_delete() {
+        let mut h = curves();
+        let k1 = h.app.automation.center("curves.key.Transform1.translate.1.1").unwrap();
+        let k12 = h.app.automation.center("curves.key.Transform1.translate.1.12").unwrap();
+        // A box around the first two keys of translate.y (and nothing of rotate's above them).
+        h.drag_at(
+            k1 + egui::vec2(-8.0, -8.0) + egui::vec2(0.0, k12.y - k1.y),
+            k12 + egui::vec2(8.0, 8.0) + egui::vec2(0.0, k1.y - k12.y),
+            PointerButton::Primary,
+            Modifiers::NONE,
+        );
+        assert_eq!(h.app.curves_selected(), 2);
+        h.click("curves.interp.constant", 1, Modifiers::NONE).unwrap();
+        let ks = keys(&h);
+        assert_eq!((ks[0].2, ks[1].2, ks[2].2), (Interp::Constant, Interp::Constant, Interp::CatmullRom));
+        h.hover(h.app.automation.center("curves.canvas").unwrap());
+        h.key(Key::Delete, Modifiers::NONE);
+        assert_eq!(keys(&h).len(), 1, "two keys deleted");
+        assert!(h.app.session.script.by_name("Transform1").is_some(), "not the node: Delete went to the Curve Editor");
+        assert_eq!(h.app.session.history(), ["Set Interpolation", "Delete Keys"]);
+    }
+}
+
 mod control {
     use super::*;
     use serde_json::{Value, json};

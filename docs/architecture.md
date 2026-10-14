@@ -128,6 +128,12 @@ The Viewer renders on its own thread with a 64 MB stack and its own node registr
 copy of the script; only the newest waiting request is rendered. Finished frames are cached by
 (script revision, node, time), so any edit invalidates them and nothing stale is shown.
 
+The bottom pane holds the Node Graph and the Curve Editor as tabs. The Curve Editor shows the
+animated knob components of the nodes whose properties are open and edits them through
+`node.editKeys` (one component's curve: remove and set keys in one atomic command) and
+`node.setInterpolation`; a key drag is one undo group. Bare-key shortcuts go to the panel under the
+pointer (Delete over the Curve Editor deletes keys, not nodes).
+
 Render… (and a Write node's Render button) runs the same plan as the `render.execute` command
 (`nukecraft_engine::render_plan`) on a background thread from a copy of the script, frame by frame,
 with a progress window and Cancel; the window stays responsive and edits made meanwhile don't

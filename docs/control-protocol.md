@@ -41,6 +41,9 @@ Every interactive element registers a stable id each frame. The main families:
 | `viewer.image`, `viewer.channel`, `viewer.exposure`, `viewer.gamma`, `viewer.fit` | The Viewer and its toolbar |
 | `viewer.handle.<Name>.<knob>` (box knobs: `.0`..`.3` corners from the bottom-left, `.move`) | On-viewer handles of nodes whose properties are open; drag them with `ui.drag` |
 | `render.progress`, `render.cancel` | The background render's progress bar and Cancel button |
+| `tab.nodeGraph`, `tab.curveEditor` | The bottom pane's tabs |
+| `curves.canvas`, `curves.fit`, `curves.delete`, `curves.interp.<constant\|linear\|catmull-rom\|horizontal>` | The Curve Editor and its toolbar |
+| `curves.curve.<Name>.<knob>.<component>`, `curves.key.<Name>.<knob>.<component>.<frame>` | A curve's name in the list (click: select its keys) and its keys |
 | `viewer.first`, `.prev`, `.play`, `.next`, `.last`, `.frame`, `.slider` | The timeline |
 | `props.<Name>.<knob>` (`.1`, `.2`… for further components), `.key`, `.browse` | Knob widgets and their key buttons |
 | `props.<Name>.name`, `.disable`, `.close`, `.render` | A node's panel header (and Write's Render button) |

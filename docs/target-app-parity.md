@@ -15,7 +15,7 @@ with Nuke yet ([fidelity/README.md](fidelity/README.md)).
 | Script files | 15% | Own `.ncs` format with repairs; no `.nk` |
 | Image formats | 15% | PNG (8/16) and EXR (half/float, data windows, layers on read) |
 | Colour management | 10% | sRGB, Rec. 709, gamma, Cineon; no OCIO |
-| User interface | 25% | Node Graph, Viewer, Properties, menus, shortcuts, undo, autosave; on-viewer handles for Transform, CornerPin, Rectangle, Radial, Crop, Ramp; missing Curve Editor, Dope Sheet, docking, Groups, copy/paste ([gaps.md](gaps.md) G1) |
+| User interface | 30% | Node Graph, Viewer, Properties, Curve Editor, menus, shortcuts, undo, autosave, background rendering; on-viewer handles for Transform, CornerPin, Rectangle, Radial, Crop, Ramp; missing tangent editing, Dope Sheet, docking, Groups, copy/paste ([gaps.md](gaps.md) G1) |
 | Scripting and expressions | 0% | Milestone M3 |
 | Performance | unknown | Not measured; single-threaded |
 | Agent control (beyond Nuke) | ahead | Every command over MCP and CLI; `render_image`; the running app over a control channel and MCP bridge; the UI headless |

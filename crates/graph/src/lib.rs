@@ -239,6 +239,30 @@ impl KnobValue {
         Ok(())
     }
 
+    /// One numeric component, to edit its animation on its own (the Curve Editor's view).
+    pub fn anim_mut(&mut self, component: usize) -> Option<&mut Anim> {
+        match self {
+            KnobValue::Number(a) if component == 0 => Some(a),
+            KnobValue::Vector(v) => v.get_mut(component),
+            _ => None,
+        }
+    }
+
+    /// The value with `n` numeric components: a single number is repeated (one number means all
+    /// components, as knobs read it). `None` for non-numeric values, shrinking, or more than
+    /// [`MAX_COMPONENTS`].
+    pub fn widened(&self, n: usize) -> Option<KnobValue> {
+        let comps = self.components()?;
+        if n < comps.len() || n > MAX_COMPONENTS {
+            return None;
+        }
+        if n == comps.len() {
+            return Some(self.clone());
+        }
+        let [single] = comps[..] else { return None };
+        Some(KnobValue::Vector(vec![single.clone(); n]))
+    }
+
     /// Removes the key at `t` from every component; a curve left without keys becomes the
     /// constant it last held. Returns whether any key was removed.
     pub fn remove_key(&mut self, t: FrameTime) -> bool {

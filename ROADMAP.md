@@ -16,7 +16,7 @@ the work list in [docs/gaps.md](docs/gaps.md), and the plan in [plan/execution-p
 | Node library breadth | ≈ 17% (43 classes) | Counted against [the node catalog](plan/nuke/node-catalog.md) |
 | Ready for real work | ≈ 8% | First desktop app; 43 nodes; no `.nk` |
 | Behaviours checked against Nuke | 0 of 20 listed | [docs/fidelity/README.md](docs/fidelity/README.md) |
-| Tests | 155 | `cargo test --workspace` (including headless UI tests) |
+| Tests | 158 | `cargo test --workspace` (including headless UI tests) |
 | Agent control | every command | MCP and CLI |
 
 ## Milestones

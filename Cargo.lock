@@ -1969,6 +1969,7 @@ dependencies = [
  "egui",
  "log",
  "nukecraft-color",
+ "nukecraft-curve",
  "nukecraft-engine",
  "nukecraft-geom",
  "nukecraft-graph",

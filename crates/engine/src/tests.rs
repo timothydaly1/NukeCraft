@@ -206,3 +206,49 @@ fn creation_fixes_format_and_time_defaults() {
     let (w, h) = (s.script.root.format.width as f64, s.script.root.format.height as f64);
     assert_eq!(knob(&s, "Rectangle1", "area"), Some(vec![w / 4.0, h / 4.0, w * 0.75, h * 0.75]));
 }
+
+#[test]
+fn keys_are_edited_one_component_at_a_time() {
+    let mut s = Session::new();
+    exec(&mut s, "node.create", json!({ "class": "Transform" }));
+    // A component of a static knob becomes a curve on its own.
+    exec(
+        &mut s,
+        "node.editKeys",
+        json!({ "node": "Transform1", "knob": "translate", "component": 1, "keys": [{ "frame": 1, "value": 0 }, { "frame": 10, "value": 90, "interp": "linear" }] }),
+    );
+    let value = |s: &Session, f: f64| {
+        let n = s.script.by_name("Transform1").unwrap();
+        n.knobs.get("translate").unwrap().eval(nukecraft_time::FrameTime::from_f64(f)).as_numbers().unwrap().to_vec()
+    };
+    assert_eq!(value(&s, 5.5), vec![0.0, 45.0], "x stays static, y is keyed (linear from frame 1)");
+    // Moving a key: remove it and set it elsewhere, in one undoable step.
+    exec(&mut s, "node.editKeys", json!({ "node": "Transform1", "knob": "translate", "component": 1, "remove": [10], "keys": [{ "frame": 19, "value": 90 }] }));
+    assert_eq!(value(&s, 10.0)[1], 45.0, "the key kept its linear interpolation when moved");
+    exec(&mut s, "node.setInterpolation", json!({ "node": "Transform1", "knob": "translate", "frames": [1], "interp": "constant" }));
+    assert_eq!(value(&s, 10.0)[1], 0.0, "constant: holds the first key");
+    exec(&mut s, "edit.undo", json!({}));
+    assert_eq!(value(&s, 10.0)[1], 45.0);
+    // Wrong frames, components and knobs are errors that change nothing.
+    let before = s.script.clone();
+    for p in [
+        json!({ "node": "Transform1", "knob": "translate", "component": 1, "remove": [7] }),
+        json!({ "node": "Transform1", "knob": "translate", "component": 5, "keys": [{ "frame": 1, "value": 1 }] }),
+        json!({ "node": "Transform1", "knob": "filter", "keys": [{ "frame": 1, "value": 1 }] }),
+        json!({ "node": "Transform1", "knob": "translate" }),
+        json!({ "node": "Transform1", "knob": "translate", "keys": [{ "frame": 1 }] }),
+    ] {
+        assert!(s.execute("node.editKeys", &p).is_err(), "{p}");
+    }
+    assert!(s.execute("node.setInterpolation", &json!({ "node": "Transform1", "knob": "translate", "frames": [3], "interp": "linear" })).is_err());
+    assert_eq!(s.script, before);
+    // Removing the last keys leaves the value it held.
+    exec(&mut s, "time.goto", json!({ "frame": 19 }));
+    exec(&mut s, "node.editKeys", json!({ "node": "Transform1", "knob": "translate", "component": 1, "remove": [1, 19] }));
+    assert_eq!(value(&s, 1.0)[1], 90.0);
+    // A colour stored as one number widens to RGB when one channel is keyed.
+    exec(&mut s, "node.create", json!({ "class": "Grade" }));
+    exec(&mut s, "node.editKeys", json!({ "node": "Grade1", "knob": "white", "component": 1, "keys": [{ "frame": 1, "value": 2 }] }));
+    let n = s.script.by_name("Grade1").unwrap();
+    assert_eq!(n.knobs.get("white").unwrap().components().unwrap().len(), 3);
+}

@@ -6,10 +6,10 @@
   `m1-desktop-app`; neither is merged to `main` yet).
 - **Waiting on the maintainer:** a Nuke session (Non-commercial is enough) to capture the oracle:
   `docs/fidelity/README.md` → "Measuring with Nuke". Until then nothing is checked against Nuke.
-- **Next task:** M2.9 the Curve Editor; then the rest of M2 (Roto, Group, Backdrop, ColorBars, CheckerBoard's
-  colours and lines) and the other G1 follow-ups in `docs/gaps.md`. When the oracle arrives,
-  fidelity fixes come first.
-- **Gate:** `cargo xtask ci` green (155 tests, including headless UI and fidelity tests).
+- **Next task:** the rest of M2: Backdrop and StickyNote, copy/paste of nodes, Group (with Input
+  and Output), CheckerBoard's colours and lines, ColorBars, then Roto; the other G1 follow-ups in
+  `docs/gaps.md`. When the oracle arrives, fidelity fixes come first.
+- **Gate:** `cargo xtask ci` green (158 tests, including headless UI and fidelity tests).
 - **Looking at the UI:** `cargo run -p nukecraft-ui-egui --example snapshot -- --out ui.png --step …`
   (headless, no GPU). The real window runs under Xvfb with Mesa's software GL; drive it with
   `--control PORT` (docs/control-protocol.md).
@@ -18,6 +18,9 @@
 
 ## Recently done
 
+- M2.9: the Curve Editor (a tab beside the Node Graph): curves of open nodes' animated knob
+  components, select/box-select/move keys (whole frames), interpolation, delete, fit; engine
+  commands `node.editKeys` and `node.setInterpolation`.
 - M2.8: on-viewer handles for the nodes whose properties are open: Transform (translate, rotation
   arm), CornerPin2D (to1..4), Rectangle, Radial, Crop (box corners and centre), Ramp (p0, p1); one
   undo step per drag, animated knobs keyed at the current frame; `ui.drag` on the control channel.

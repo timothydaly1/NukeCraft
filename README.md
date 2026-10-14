@@ -45,8 +45,9 @@ What works today:
 
 - **The desktop app:** a Node Graph (Tab search, B/G/M/T/K/./R/W to insert nodes, drag to connect,
   box select, 1 to view), a Viewer rendering on its own thread (channels, exposure, gamma, pixel
-  readout, timeline and playback), a Properties panel (every knob kind, keys, one undo step per
-  drag), menus built from the command registry, undo/redo, autosave.
+  readout, timeline and playback, on-viewer handles), a Properties panel (every knob kind, keys,
+  one undo step per drag), a Curve Editor, background rendering with progress, menus built from
+  the command registry, undo/redo, autosave.
 - **43 node classes:** Read, Write, Constant, CheckerBoard, Ramp, Rectangle, Radial, Grade,
   ColorCorrect, Saturation, Clamp, Invert, Multiply, Add, Gamma, Exposure (all with mask, unpremult
   and mix), Shuffle, Copy, ChannelMerge, Remove, Premult, Unpremult, Merge (29 operations, mask

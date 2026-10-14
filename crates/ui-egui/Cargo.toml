@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 nukecraft-time = { workspace = true }
+nukecraft-curve = { workspace = true }
 nukecraft-geom = { workspace = true }
 nukecraft-color = { workspace = true }
 nukecraft-raster = { workspace = true }

@@ -154,6 +154,22 @@ static SPECS: &[CommandSpec] = &[
     edit("node.resetKnob", "Reset Knob to Default", &[], None, "{node, knob}", node_reset_knob),
     edit("node.removeKey", "Delete Key", &[], None, "{node, knob, frame}", node_remove_key),
     edit("node.clearAnimation", "No Animation", &[], None, "{node, knob} — keeps the value at the current frame", node_clear_animation),
+    edit(
+        "node.editKeys",
+        "Edit Keys",
+        &[],
+        None,
+        "{node, knob, component?: 0, remove?: [frames], keys?: [{frame, value, interp?}]} — one component's curve: removes keys, then sets keys (moving a key is both); a curve left without keys keeps its value",
+        node_edit_keys,
+    ),
+    edit(
+        "node.setInterpolation",
+        "Set Interpolation",
+        &[],
+        None,
+        "{node, knob, component?, frames: [frames], interp: constant|linear|horizontal|catmull-rom} — of the keys at those frames (every component unless `component`)",
+        node_set_interpolation,
+    ),
     edit("node.move", "Move Node", &[], None, "{node, x, y} | {moves: [{node, x, y}]} — positions in the node graph, one undo step", node_move),
     edit("node.label", "Set Label", &[], None, "{node, label}", node_label),
     // Time and rendering
@@ -526,6 +542,119 @@ fn node_clear_animation(s: &mut Session, p: &Value) -> Result<Value> {
     let t = s.time;
     if let Some(v) = s.script.node_mut(id).and_then(|n| n.knobs.get_mut(&knob)) {
         v.clear_animation(t);
+    }
+    Ok(json!({}))
+}
+
+/// The most keys one key command may touch.
+const MAX_KEY_EDITS: usize = 100_000;
+
+fn frame_list(p: &Value, key: &str) -> Result<Vec<FrameTime>> {
+    let Some(v) = p.get(key).filter(|v| !v.is_null()) else { return Ok(Vec::new()) };
+    let arr = v.as_array().ok_or_else(|| bad(format!("`{key}` must be a list of frame numbers")))?;
+    if arr.len() > MAX_KEY_EDITS {
+        return Err(bad(format!("`{key}` lists more than {MAX_KEY_EDITS} frames")));
+    }
+    arr.iter()
+        .map(|f| f.as_f64().filter(|f| f.is_finite()).map(FrameTime::from_f64).ok_or_else(|| bad(format!("`{key}` must be a list of frame numbers"))))
+        .collect()
+}
+
+fn component_of(p: &Value) -> Result<Option<usize>> {
+    match p.get("component") {
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => Ok(Some(params::usize(p, "component")?)),
+    }
+}
+
+fn node_edit_keys(s: &mut Session, p: &Value) -> Result<Value> {
+    let (id, knob) = knob_of(s, p)?;
+    let comp = component_of(p)?.unwrap_or(0);
+    let removes = frame_list(p, "remove")?;
+    let mut sets = Vec::new();
+    if let Some(v) = p.get("keys").filter(|v| !v.is_null()) {
+        let arr = v.as_array().ok_or_else(|| bad("`keys` must be a list of {frame, value, interp?}"))?;
+        if arr.len() > MAX_KEY_EDITS {
+            return Err(bad(format!("`keys` lists more than {MAX_KEY_EDITS} keys")));
+        }
+        for k in arr {
+            let t = params::opt_frame(k, "frame")?.ok_or_else(|| bad("each key needs a `frame`"))?;
+            let interp = if k.get("interp").is_some_and(|i| !i.is_null()) { Some(parse_interp(k)?) } else { None };
+            sets.push((t, params::f64(k, "value")?, interp));
+        }
+    }
+    if removes.is_empty() && sets.is_empty() {
+        return Err(bad("nothing to do: give `remove` and/or `keys`"));
+    }
+    let spec = node_spec(s, id)?;
+    let ks = *spec.knob(&knob).ok_or_else(|| bad("no such knob"))?;
+    if !ks.kind.is_numeric() {
+        return Err(bad(format!("`{knob}` is not numeric and has no keys")));
+    }
+    let format = s.script.root.format.clone();
+    let now = s.time;
+    let node = s.script.node_mut(id).ok_or_else(|| bad("no such node"))?;
+    let current = node.knobs.get(&knob).cloned().unwrap_or_else(|| ks.default_value(&format));
+    let arity = current.components().map_or(0, |c| c.len());
+    // A component past the stored ones widens the value to the knob's next valid size.
+    let mut value = if comp < arity {
+        current
+    } else {
+        (comp + 1..=nukecraft_graph::MAX_COMPONENTS)
+            .filter_map(|n| current.widened(n))
+            .find(|v| ks.validate(v.clone()).is_ok())
+            .ok_or_else(|| bad(format!("`{knob}` has no component {comp}")))?
+    };
+    let anim = value.anim_mut(comp).ok_or_else(|| bad(format!("`{knob}` has no component {comp}")))?;
+    let held = anim.eval(now);
+    let mut curve = match anim {
+        nukecraft_graph::Anim::Curve { curve } => curve.clone(),
+        nukecraft_graph::Anim::Static(_) => nukecraft_curve::Curve::new(),
+    };
+    for t in &removes {
+        if !curve.remove_key(*t) {
+            return Err(bad(format!("`{knob}` has no key at frame {t}")));
+        }
+    }
+    for (t, v, interp) in sets {
+        let interp = interp.or_else(|| curve.keys().iter().find(|k| k.time == t).map(|k| k.interp)).unwrap_or_default();
+        curve.set_key(nukecraft_curve::Key { time: t, value: v, interp }).map_err(bad)?;
+    }
+    *anim = if curve.is_empty() { nukecraft_graph::Anim::Static(held) } else { nukecraft_graph::Anim::Curve { curve } };
+    let value = ks.validate(value).map_err(bad)?;
+    node.knobs.insert(knob, value);
+    Ok(json!({}))
+}
+
+fn node_set_interpolation(s: &mut Session, p: &Value) -> Result<Value> {
+    let (id, knob) = knob_of(s, p)?;
+    let comp = component_of(p)?;
+    let frames = frame_list(p, "frames")?;
+    if frames.is_empty() {
+        return Err(bad("`frames` (the keys to change) is required"));
+    }
+    let interp = parse_interp(p)?;
+    let node = s.script.node_mut(id).ok_or_else(|| bad("no such node"))?;
+    let value = node.knobs.get_mut(&knob).ok_or_else(|| bad(format!("`{knob}` is not animated")))?;
+    let arity = value.components().map_or(0, |c| c.len());
+    let comps: Vec<usize> = match comp {
+        Some(c) if c < arity => vec![c],
+        Some(c) => return Err(bad(format!("`{knob}` has no component {c}"))),
+        None => (0..arity).collect(),
+    };
+    for t in frames {
+        let mut found = false;
+        for &c in &comps {
+            if let Some(nukecraft_graph::Anim::Curve { curve }) = value.anim_mut(c)
+                && let Some(k) = curve.keys().iter().find(|k| k.time == t).copied()
+            {
+                curve.set_key(nukecraft_curve::Key { interp, ..k }).map_err(bad)?;
+                found = true;
+            }
+        }
+        if !found {
+            return Err(bad(format!("`{knob}` has no key at frame {t}")));
+        }
     }
     Ok(json!({}))
 }
