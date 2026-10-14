@@ -1,10 +1,59 @@
-# Fidelity: behaviours not yet checked against Nuke
+# Fidelity: checking NukeCraft against Nuke
 
-> **Last updated:** 2026-10-14 · **Measured cases:** 0
+> **Last updated:** 2026-10-14 · **Harness:** ready (108 cases) · **Oracle numbers:** none yet
 
-Every entry is an implementation choice made from public documentation and general knowledge, not
-yet compared with Nuke itself. Each needs an oracle case ([testing.md](../testing.md#fidelity-against-nuke))
-before it can be called matching. Ordered by how often the behaviour shows up in real scripts.
+NukeCraft's tests pin its own behaviour; they can't show it matches Nuke. The fidelity harness
+(`crates/fidelity`) can: 108 synthetic cases (tiny graphs with Nuke's class and knob names on a
+64×64 format) are measured by NukeCraft and by Nuke, and compared value by value. Nuke's side is a
+generated Python script that writes one JSON file, the **oracle**; nothing else from Nuke is used
+or kept.
+
+## Measuring with Nuke (Non-commercial is enough)
+
+The script is written for Nuke Non-commercial's limits: each case has at most a handful of nodes
+(its Python API retrieves only 10 nodes per script), nodes are kept by reference and never looked
+up, nothing is rendered to disk, and it runs in the GUI's Script Editor (command-line rendering is
+restricted to encrypted scripts). Non-commercial's licence is for non-commercial use: check that
+measuring behaviour for this open-source project fits its terms before you start.
+
+1. Write the script: `cargo run -p nukecraft-cli -- fidelity export plan/nuke/ref/`
+   (`plan/nuke/ref/` is gitignored).
+2. Start Nuke (Non-commercial: `Nuke… --nc`), open a new empty script, open **Script Editor** and run
+   `exec(open('/full/path/to/plan/nuke/ref/nukecraft_fidelity.py').read())`. It takes seconds and
+   prints where it wrote `nukecraft_oracle.json` (your home folder when run this way; set
+   `NUKECRAFT_ORACLE_OUT` to choose).
+3. Copy that file to `docs/fidelity/oracle.json` and compare:
+   `cargo run -p nukecraft-cli -- fidelity compare docs/fidelity/oracle.json --report docs/fidelity/report.md --matching docs/fidelity/matching.txt`
+4. Commit `oracle.json`, `report.md` and `matching.txt`. From then on `cargo test` fails if a case that
+   matched stops matching. Cases that differ are the fidelity work list; fix one, re-run step 3.
+
+The oracle holds only numbers measured on these synthetic graphs, plus the default values of the
+knobs NukeCraft implements (Nuke's own defaults, which the report compares with NukeCraft's). Cases
+for features NukeCraft doesn't have yet (Notch/Lanczos/Sinc filters, soft-light, the four-colour
+CheckerBoard) are measured too, so the numbers are waiting when the feature is built.
+
+`nukecraft-cli fidelity run` prints NukeCraft's own numbers in the same format, for inspection.
+
+## The cases
+
+| Area | Cases | What they pin down |
+|---|---|---|
+| F1 | `transform.filter.*` (11), `transform.minify.*` (3) | Each filter's kernel (an impulse moved by a fraction of a pixel), and how kernels widen when scaling down |
+| F2 | `transform.matrix.*` (4) | The order of translate/rotate/scale/skew about the centre (a coordinate image through the Impulse filter) |
+| F3 | `blur.*` (7) | Size → kernel for box/triangle/quadratic/gaussian; edges |
+| F6 | `animation.default` | The default interpolation of new keys, read every half frame |
+| F7 | `grade.*` (7), `saturation.*` (3), `premult`, `switch.which` | Grade's formula, gamma on negatives, reverse, clamps, mix; luminance weights |
+| F8 | `merge.*` (62) | Every operation, in range and out of range (`.hdr`); mask and mix; A's edges outside its bbox |
+| F9, F10 | `checkerboard.*`, `ramp.*` | Box placement; the four Ramp profiles |
+| F12 | `crop.*` | Fractional crop boxes, the black border, reformat |
+
+F4 (what the Viewer and Write show outside the bbox), F5 (Edit ▸ Delete) and F11 (Read's colour
+defaults per file type) need the GUI or files on disk and stay manual checks.
+
+## Open questions
+
+Every entry below is an implementation choice made from public documentation and general
+knowledge, not yet compared with Nuke itself.
 
 | # | Area | NukeCraft does | To check |
 |---|---|---|---|

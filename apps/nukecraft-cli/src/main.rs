@@ -24,6 +24,10 @@ USAGE:
   nukecraft-cli frame SCRIPT.ncs --node NAME --out FILE.png|.exr [--frame N]
                                                       render one node at one frame
   nukecraft-cli info SCRIPT.ncs --node NAME [--frame N]
+  nukecraft-cli fidelity export DIR                   write the Nuke oracle script (run it in Nuke)
+  nukecraft-cli fidelity compare ORACLE.json [--report FILE.md] [--matching FILE.txt]
+                                                      compare NukeCraft with Nuke's numbers
+  nukecraft-cli fidelity run                          NukeCraft's own numbers for every case (JSON)
   nukecraft-cli nodes                                 node classes and their knobs (JSON)
   nukecraft-cli commands                              engine commands (JSON)
   nukecraft-cli mcp [SCRIPT.ncs | --demo]             MCP server on stdin/stdout
@@ -146,6 +150,7 @@ fn run(mut args: Vec<String>) -> Result<Option<Value>, Failure> {
             let mut s = open(&mut args)?;
             Ok(Some(s.execute("query.info", &json!({ "node": node, "frame": frame }))?))
         }
+        "fidelity" => fidelity(args),
         "nodes" => Ok(Some(Session::new().execute("query.nodeClasses", &json!({}))?)),
         "commands" => Ok(Some(Session::new().execute("query.commands", &json!({}))?)),
         "mcp" => {
@@ -172,6 +177,61 @@ fn run(mut args: Vec<String>) -> Result<Option<Value>, Failure> {
             Ok(None)
         }
         other => Err(usage(format!("unknown subcommand `{other}`"))),
+    }
+}
+
+fn fidelity(mut args: Vec<String>) -> Result<Option<Value>, Failure> {
+    let what = positional(&mut args, "export | compare | run")?;
+    let cases = nukecraft_fidelity::cases();
+    let io = |path: &str, e: std::io::Error| Failure::Run(format!("{path}: {e}"));
+    match what.as_str() {
+        "export" => {
+            let dir = positional(&mut args, "DIR")?;
+            std::fs::create_dir_all(&dir).map_err(|e| io(&dir, e))?;
+            let path = std::path::Path::new(&dir).join("nukecraft_fidelity.py");
+            let script = nukecraft_fidelity::export_python(&cases).map_err(Failure::Run)?;
+            std::fs::write(&path, script).map_err(|e| io(&path.display().to_string(), e))?;
+            Ok(Some(json!({
+                "wrote": path.display().to_string(),
+                "cases": cases.len(),
+                "next": format!("in Nuke's Script Editor: exec(open({:?}).read())", path.display().to_string()),
+            })))
+        }
+        "run" => Ok(Some(nukecraft_fidelity::run_all(&cases))),
+        "compare" => {
+            let report_path = take_opt(&mut args, "--report")?;
+            let matching_path = take_opt(&mut args, "--matching")?;
+            let oracle_path = positional(&mut args, "ORACLE.json")?;
+            let text = std::fs::read_to_string(&oracle_path).map_err(|e| io(&oracle_path, e))?;
+            let oracle: Value = serde_json::from_str(&text).map_err(|e| Failure::Run(format!("{oracle_path}: {e}")))?;
+            let report = nukecraft_fidelity::compare(&cases, &oracle);
+            if let Some(p) = &report_path {
+                std::fs::write(p, report.markdown()).map_err(|e| io(p, e))?;
+            }
+            let matched = report.matched();
+            if let Some(p) = &matching_path {
+                let mut text = String::from("# Cases that matched Nuke; `cargo test` keeps them matching.\n");
+                for id in &matched {
+                    text.push_str(id);
+                    text.push('\n');
+                }
+                std::fs::write(p, text).map_err(|e| io(p, e))?;
+            }
+            let count = |f: fn(&nukecraft_fidelity::Outcome) -> bool| report.cases.iter().filter(|c| f(&c.outcome)).count();
+            use nukecraft_fidelity::Outcome;
+            Ok(Some(json!({
+                "nuke": report.nuke,
+                "cases": report.cases.len(),
+                "match": matched.len(),
+                "differ": count(|o| matches!(o, Outcome::Differs { .. })),
+                "notInNukeCraft": count(|o| matches!(o, Outcome::NotImplemented)),
+                "noOracle": count(|o| matches!(o, Outcome::NoOracle)),
+                "errors": count(|o| matches!(o, Outcome::NukeError(_) | Outcome::OursError(_))),
+                "defaultsDiffer": report.defaults.len(),
+                "report": report_path,
+            })))
+        }
+        other => Err(usage(format!("unknown fidelity command `{other}` (export, compare, run)"))),
     }
 }
 

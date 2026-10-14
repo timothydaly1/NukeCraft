@@ -24,7 +24,7 @@ A task is done when its tests pass, `cargo xtask ci` is green, and the docs it t
 | M1.3 | Viewer: render the viewed node on a background thread, format and bbox overlays, channel and alpha display, exposure/gamma, zoom/pan, pixel readout, frame slider and playback with a RAM cache |
 | M1.4 | Properties panel: a widget per knob kind (sliders, colour, XY with on-viewer handles, choices, channels, file browser), key/animated indicators, set-key and no-animation actions — done (colour picker and on-viewer handles: later) |
 | M1.5 | Control channel (JSON lines over TCP: execute, widget automation ids, screenshots) and the MCP `--bridge` — done |
-| M1.6 | Fidelity harness: synthetic case generator, oracle number files, comparison tests; first cases F1–F3 |
+| M1.6 | Fidelity harness: synthetic case generator, oracle number files, comparison tests; first cases F1–F3 — done (108 cases over F1–F3, F6–F10, F12; Nuke's numbers to be captured) |
 
 ## M2 — Everyday compositing nodes
 

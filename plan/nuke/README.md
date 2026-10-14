@@ -20,6 +20,12 @@ reference material that must never be committed.
 - Committing Nuke screenshots, renders, `.nk` files written by Nuke, gizmos or toolsets.
 - Reading Natron or any other GPL/LGPL/AGPL compositor's source.
 
+## Measuring
+
+The fidelity harness generates the Nuke-side script: `docs/fidelity/README.md` → "Measuring with
+Nuke". Keep the generated script and Nuke's output here (`plan/nuke/ref/`) until the numbers are
+copied to `docs/fidelity/oracle.json`.
+
 ## Files here
 
 - [node-catalog.md](node-catalog.md): Nuke's toolbar nodes by category, with NukeCraft's status.

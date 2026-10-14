@@ -1829,6 +1829,7 @@ dependencies = [
  "log",
  "nukecraft-automation",
  "nukecraft-engine",
+ "nukecraft-fidelity",
  "serde_json",
 ]
 
@@ -1863,6 +1864,20 @@ dependencies = [
  "nukecraft-time",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "nukecraft-fidelity"
+version = "0.1.0"
+dependencies = [
+ "nukecraft-engine",
+ "nukecraft-geom",
+ "nukecraft-graph",
+ "nukecraft-nodes",
+ "nukecraft-raster",
+ "nukecraft-render",
+ "nukecraft-time",
+ "serde_json",
 ]
 
 [[package]]

@@ -20,7 +20,7 @@ production work in it yet.
 |---|---|---|---|
 | G1 | **Desktop app is a first version**: no Curve Editor or Dope Sheet, no on-viewer handles (Transform, Ramp, Crop), no colour picker, no copy/paste of nodes, Groups or Backdrops, no Dot insertion on a pipe, fixed panel layout (no docking), no recent files or preferences; Render… blocks the window while it writes; the Viewer shows only the format (not the bbox outside it), no wipe/compare or ROI | Artists feel these within minutes | M1 follow-ups, M2 |
 | G2 | **Node library** (≈ 15 of the ≈ 250 nodes in Nuke's toolbar; no Reformat, Shuffle, ColorCorrect, Roto, Keymix, Tracker, Keyer…) | Real scripts use 30–60 distinct classes | M2, M5–M8 |
-| G3 | **No fidelity measurements** ([fidelity/README.md](fidelity/README.md) lists 12 unchecked behaviours) | "Looks right" isn't "matches Nuke"; artists notice filter and blur differences | M1.6 onwards |
+| G3 | **No fidelity measurements yet**: the harness is ready (108 cases, [fidelity/README.md](fidelity/README.md)) but Nuke's numbers haven't been captured | "Looks right" isn't "matches Nuke"; artists notice filter and blur differences | needs a Nuke session (Non-commercial is enough) |
 | G4 | **No `.nk` import or export** | Existing work and studio pipelines live in `.nk` | M3 |
 | G5 | **No expressions or scripting** (TCL expressions, linked knobs, Python) | Rigs, gizmos and pipeline tools depend on them | M3 |
 | G6 | **Performance**: single-threaded, whole-region renders, no persistent cache, no GPU, no proxy mode | 2K/4K plates with deep graphs need tiles, threads and caching to be interactive | M4 |

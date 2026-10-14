@@ -25,6 +25,7 @@ Everything in L0–L4 builds for `wasm32-unknown-unknown` (`cargo xtask wasm`).
 | L3 | `io` | PNG and OpenEXR in and out (pure Rust), frame-number patterns, the Read and Write nodes, `execute_write` |
 | L4 | `engine` | `Session`: script, undo/redo, journal, crash guard, the command registry, the demo script |
 | L5 | `automation` | The MCP server (stdio JSON-RPC): `execute`, `list_commands`, `node_classes`, `get_script`, `render_image` |
+| L5 | `fidelity` | Synthetic cases measured by NukeCraft and (through a generated Python script) by Nuke, and their comparison |
 | L5 | `ui-egui` | The desktop interface (egui): menus from the command registry, shortcuts, panels, dialogs, the automation registry, and `snapshot` (headless runs with a CPU rasteriser) |
 | L6 | apps `nukecraft-cli`, `nukecraft` | Command-line tool (render, exec, info, MCP); the desktop app (eframe, OpenGL) |
 

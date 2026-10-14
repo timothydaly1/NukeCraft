@@ -1,0 +1,22 @@
+[package]
+name = "nukecraft-fidelity"
+description = "Fidelity harness: synthetic cases rendered by NukeCraft and by Nuke (oracle), compared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+nukecraft-time = { workspace = true }
+nukecraft-geom = { workspace = true }
+nukecraft-raster = { workspace = true }
+nukecraft-graph = { workspace = true }
+nukecraft-nodes = { workspace = true }
+nukecraft-render = { workspace = true }
+nukecraft-engine = { workspace = true }
+serde_json = { workspace = true }

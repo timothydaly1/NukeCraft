@@ -18,5 +18,6 @@ path = "src/main.rs"
 [dependencies]
 nukecraft-engine = { workspace = true }
 nukecraft-automation = { workspace = true }
+nukecraft-fidelity = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

@@ -24,6 +24,7 @@ nukecraft-io = { path = "crates/io" }
 nukecraft-engine = { path = "crates/engine" }
 nukecraft-automation = { path = "crates/automation" }
 nukecraft-ui-egui = { path = "crates/ui-egui" }
+nukecraft-fidelity = { path = "crates/fidelity" }
 
 # foundation
 thiserror = "2"

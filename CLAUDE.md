@@ -63,7 +63,9 @@ asset licensed and attributed (`cargo xtask assets`).
   (steps: `engine.execute`, `ui.click`, `ui.drag`, `ui.key`, `ui.text`, `ui.hover`, `ui.inspect`, `snap`;
   element ids come from the automation registry). The rasteriser matches the real window (checked
   under Xvfb).
-- Nuke reference: run your own synthetic scripts in a licensed Nuke (`nuke -t script.py` renders
-  headless) and record **numbers** in `docs/fidelity/`; captures stay in `plan/nuke/ref/` (gitignored).
-  See [`plan/nuke/README.md`](plan/nuke/README.md).
+- Nuke reference: the fidelity harness (`crates/fidelity`) writes a Python script that measures
+  every case in Nuke (Non-commercial works; run it in the Script Editor) and compares the numbers
+  with NukeCraft's: `nukecraft-cli fidelity export | compare` ([`docs/fidelity/README.md`](docs/fidelity/README.md)).
+  New behaviour that should match Nuke gets a case there. Only numbers are committed; captures stay
+  in `plan/nuke/ref/` (gitignored).
 - Parallel agents: separate git worktrees and `CARGO_TARGET_DIR=target/agent-<name>`.
