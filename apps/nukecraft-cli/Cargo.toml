@@ -1,0 +1,22 @@
+[package]
+name = "nukecraft-cli"
+description = "NukeCraft's command-line tool: render, exec, get/set knobs, MCP server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "nukecraft-cli"
+path = "src/main.rs"
+
+[dependencies]
+nukecraft-engine = { workspace = true }
+nukecraft-automation = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }

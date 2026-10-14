@@ -1,0 +1,15 @@
+[package]
+name = "nukecraft-geom"
+description = "2D geometry for NukeCraft: vectors, affine matrices, integer boxes and formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }

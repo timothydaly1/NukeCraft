@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nukecraft": {
+      "command": "cargo",
+      "args": ["run", "--quiet", "--release", "-p", "nukecraft-cli", "--", "mcp", "--demo"]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+NukeCraft
+Copyright (c) 2026 the NukeCraft contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+Nuke is a trademark of The Foundry Visionmongers Ltd. NukeCraft is an independent, clean-room
+project; it is not affiliated with, sponsored by or endorsed by Foundry. The name is used only to
+describe the application NukeCraft aims to be compatible with.
+
+Third-party material
+
+NukeCraft bundles no third-party assets yet. When it does, each one is listed (author, source,
+licence) in ATTRIBUTION.md, with its licence text where the licence requires it.

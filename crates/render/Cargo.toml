@@ -1,0 +1,25 @@
+[package]
+name = "nukecraft-render"
+description = "Pull-based evaluation of a NukeCraft script: bbox and region-of-interest propagation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+nukecraft-time = { workspace = true }
+nukecraft-geom = { workspace = true }
+nukecraft-color = { workspace = true }
+nukecraft-raster = { workspace = true }
+nukecraft-graph = { workspace = true }
+nukecraft-nodes = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

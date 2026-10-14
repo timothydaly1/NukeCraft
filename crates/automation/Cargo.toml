@@ -1,0 +1,23 @@
+[package]
+name = "nukecraft-automation"
+description = "The NukeCraft MCP server (Model Context Protocol over stdio)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+nukecraft-time = { workspace = true }
+nukecraft-color = { workspace = true }
+nukecraft-engine = { workspace = true }
+nukecraft-render = { workspace = true }
+nukecraft-io = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+log = { workspace = true }
+

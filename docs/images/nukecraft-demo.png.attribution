@@ -1,0 +1,8 @@
+asset:        nukecraft-demo.png
+title:        Frame 12 of the NukeCraft demo script
+author:       NukeCraft contributors
+source:       original work
+license:      MIT OR Apache-2.0
+license-file: LICENSE-MIT, LICENSE-APACHE
+added:        2026-10-14 by NukeCraft contributors
+notes:        Rendered by NukeCraft itself: `nukecraft-cli demo demo.ncs` then `nukecraft-cli frame demo.ncs --node Write1 --frame 12 --out nukecraft-demo.png`. All content is procedural (crates/engine/src/demo.rs).

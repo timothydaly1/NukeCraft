@@ -1,0 +1,66 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+default-members = ["crates/*", "apps/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/timothydaly1/nukecraft"
+
+[workspace.dependencies]
+# internal
+nukecraft-time = { path = "crates/time" }
+nukecraft-geom = { path = "crates/geom" }
+nukecraft-color = { path = "crates/color" }
+nukecraft-raster = { path = "crates/raster" }
+nukecraft-curve = { path = "crates/curve" }
+nukecraft-graph = { path = "crates/graph" }
+nukecraft-nodes = { path = "crates/nodes" }
+nukecraft-render = { path = "crates/render" }
+nukecraft-io = { path = "crates/io" }
+nukecraft-engine = { path = "crates/engine" }
+nukecraft-automation = { path = "crates/automation" }
+
+# foundation
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+log = "0.4"
+base64 = "0.22"
+
+# image formats (pure Rust, permissive licences)
+png = "0.18"
+exr = { version = "1.74", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+type_complexity = "allow"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+# Pixel hot loops: keep debug builds interactive.
+[profile.dev.package.nukecraft-raster]
+opt-level = 3
+
+[profile.dev.package.nukecraft-nodes]
+opt-level = 3
+
+[profile.dev.package.nukecraft-render]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,8 @@
+*~
+target/
+/dist
+/log
+.DS_Store
+.claude/worktrees/
+# Local Nuke reference material (screenshots, renders, notes from the licensed app). Never commit it.
+plan/nuke/ref/

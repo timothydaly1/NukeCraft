@@ -1,0 +1,26 @@
+[package]
+name = "nukecraft-engine"
+description = "The NukeCraft session: script, undo, the command registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+nukecraft-time = { workspace = true }
+nukecraft-geom = { workspace = true }
+nukecraft-curve = { workspace = true }
+nukecraft-raster = { workspace = true }
+nukecraft-graph = { workspace = true }
+nukecraft-nodes = { workspace = true }
+nukecraft-render = { workspace = true }
+nukecraft-io = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+

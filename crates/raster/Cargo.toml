@@ -1,0 +1,16 @@
+[package]
+name = "nukecraft-raster"
+description = "Multichannel float images with a data window (bbox), Nuke's y-up pixel grid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+nukecraft-geom = { workspace = true }
+serde = { workspace = true }
